@@ -1,0 +1,22 @@
+# ROS 2 / colcon generated output
+build/
+install/
+log/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+
+# Editor and local machine settings
+.vscode/
+.idea/
+
+# Runtime output
+*.log
+core
+core.*
+
+# Reference paper kept locally; do not redistribute without permission
+Hybrid_Soft_Robots_Incorporating_Soft_and_Stiff_Elements.pdf
