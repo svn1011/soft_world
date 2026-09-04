@@ -206,31 +206,6 @@ ros2 topic echo /soft_limb/measured_tip/phi
 ros2 topic echo /soft_limb/measured_tip/theta
 ros2 topic echo /soft_limb/measured_tip/orientation
 ```
-
-### Current runtime tuning
-
-| Parameter | Active value |
-|---|---:|
-| Physics frequency | 240 Hz |
-| Solver position/velocity iterations | 32 / 8 |
-| Base drive stiffness/damping | 6400 / 240 |
-| Split A/B drive stiffness/damping | 12800 / 480 |
-| Body linear/angular damping | 2.0 / 10.0 |
-| Target ramp limit | 20°/s |
-| Per-joint X/Y bend limit | ±25° |
-| Torque command limit | ±1,000,000 N·m |
-| Torque slew limit | 2,000,000 N·m/s |
-
-Each moving disc and virtual link has mass `0.01 kg`. In position mode the
-loader applies an upward force of `mass * 9.81 m/s²` to every moving body to
-remove gravity-induced bend error. This compensation switches off whenever
-nonzero direct torque control is active.
-
-Tune the actively launched system in `scripts/load_soft_limb_working.py`, then
-rebuild. At startup this loader overrides drive values stored in the USD. The
-constants in the USD-generator scripts affect newly generated assets, but do
-not replace the loader's runtime override.
-
 ## Hybrid torque/position control (PENDING)
 
 ```bash
