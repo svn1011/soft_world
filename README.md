@@ -139,16 +139,6 @@ This starts:
 The limb starts with zero bend targets. Start a controller only after the
 simulation has loaded.
 
-### Six-disc discretization
-
-The active working model has six discs and five bend intervals. Its interval
-pitch is 55 mm, so its 275 mm base-to-tip centerline length matches the former
-12-disc model (`11 × 25 mm`). Runtime stiffness and damping are scaled by
-`25/55` to preserve approximately the same continuum-level compliance after
-reducing the number of serial intervals. The loader can prune and respan an
-older checked-in working USD in memory before PhysX initialization, while the
-updated working generator produces six-disc assets directly.
-
 ## Display the limb in RViz
 
 The working launch opens RViz automatically.
@@ -167,7 +157,7 @@ it does not edit the topic. If its value cell is hidden, drag the divider
 between the property and value columns toward the left.
 
 If the model is outside the view, select RobotModel, press `F`, and zoom with
-the mouse wheel. The expected model is a downward chain of 6 discs with a
+the mouse wheel. The expected model is a downward chain of 12 discs with a
 blue base, gray body, orange one-third gauges, and cyan two-thirds gauges.
 In Isaac Sim the free final disc is red. The RViz reconstruction currently
 renders that final disc gray; this color difference is not a tracking error.
@@ -188,7 +178,7 @@ python3 scripts/control_soft_limb_working.py --ros-args \
 - `phi_position`: total bend magnitude in degrees.
 - `theta_position`: bend direction around the limb in degrees.
 
-The total bend is distributed over 5 disc intervals. Each dual-D6 A/B joint
+The total bend is distributed over 11 disc intervals. Each dual-D6 A/B joint
 receives half of its interval angle. The requested angle stays as the PhysX
 drive target while the acceleration drive generates mass-dependent corrective
 torque from position and velocity error. Targets ramp at no more than 20°/s to
@@ -253,8 +243,8 @@ The supplied control scripts publish at 20 Hz. The simulator node
 | Joint group | Position mode | Hybrid mode |
 |---|---|---|
 | Base | `/soft_limb/pair_00/base/roll/position`, `/yaw/position` | `/soft_limb/pair_00/base/roll/torque`, `/yaw/position` |
-| A half, pairs 01–04 | `/soft_limb/pair_XX/d6_a/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_a/roll/torque`, `/yaw/position` |
-| B half, pairs 01–04 | `/soft_limb/pair_XX/d6_b/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_b/roll/torque`, `/yaw/position` |
+| A half, pairs 01–10 | `/soft_limb/pair_XX/d6_a/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_a/roll/torque`, `/yaw/position` |
+| B half, pairs 01–10 | `/soft_limb/pair_XX/d6_b/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_b/roll/torque`, `/yaw/position` |
 
 Normal operation should use the supplied controller parameters rather than
 publishing all of these low-level topics individually.
@@ -263,16 +253,11 @@ publishing all of these low-level topics individually.
 
 | Station | Disc | Circumferential positions | Color |
 |---|---:|---|---|
-| `one_third` | `Disk_02` | 0°, 120°, 240° | Orange |
-| `two_thirds` | `Disk_03` | 180°, 300°, 60° | Cyan |
+| `one_third` | `Disk_04` | 0°, 120°, 240° | Orange |
+| `two_thirds` | `Disk_07` | 180°, 300°, 60° | Cyan |
 
 The second ring is offset 180° from the first. Since each ring repeats every
 120°, this is visible geometrically as a 60° stagger.
-
-With only six discs, exact one-third points fall between discs. `Disk_02` and
-`Disk_03` are the nearest symmetric disc pair, at 40% and 60% of the
-base-to-tip centerline. The topic station names remain unchanged for API
-compatibility.
 
 Readings are calculated from live disc poses, not control targets. They respond
 to position control, torque control, gravity/contact, and manual manipulation.
@@ -328,9 +313,9 @@ adhesive layer, or limb material.
 ### RViz reconstruction
 
 The two gauge rings reconstruct local X/Y curvature. Curvature is interpolated
-over 5 intervals. Each RViz interval uses an exact symmetric circular-arc
+over 11 intervals. Each RViz interval uses an exact symmetric circular-arc
 transform: direction rotation, half-spacing translation, bend rotation,
-half-spacing translation, and inverse direction rotation. This uses 15 RViz
+half-spacing translation, and inverse direction rotation. This uses 33 RViz
 joints and makes the extended radial disc lines share a common curvature
 center when the measured curvature is constant. Arbitrary shapes between the
 two stations are still approximated because two measurement sections cannot
@@ -462,7 +447,7 @@ python3 scripts/control_quadraped.py
 - `scripts/control_soft_limb_working.py` — position controller.
 - `scripts/control_soft_limb_hybrid_working.py` — hybrid controller.
 - `scripts/plot_strain_gauges_working.py` — six live microstrain graphs.
-- `soft_world/robot_description_working.py` — generated 6-disc RViz URDF.
+- `soft_world/robot_description_working.py` — generated 12-disc RViz URDF.
 - `usd/soft_limb_hanging_working.usd` — active hanging asset.
 - `usd/soft_limb_position_control_working.usd` — working position asset.
 - `scripts/soft_limb_hang_working.py` and `scripts/soft_limb_working.py` — USD
