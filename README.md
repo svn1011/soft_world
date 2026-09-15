@@ -139,6 +139,14 @@ This starts:
 The limb starts with zero bend targets. Start a controller only after the
 simulation has loaded.
 
+The six-disc working limb now has a 125 mm base-to-tip centerline: five
+25 mm intervals, with a 20 mm clear gap between 5 mm-thick discs. Runtime
+base stiffness is 6400 and damping 240; split A/B joint gains remain twice
+the base values. Body damping,
+gravity compensation, solver settings, sensor topics, and graphing are retained.
+The original twelve-disc USDs remain unchanged for backup; the launch loads
+the dedicated six-disc hanging USD directly, without runtime disc removal.
+
 ## Display the limb in RViz
 
 The working launch opens RViz automatically.
@@ -157,7 +165,7 @@ it does not edit the topic. If its value cell is hidden, drag the divider
 between the property and value columns toward the left.
 
 If the model is outside the view, select RobotModel, press `F`, and zoom with
-the mouse wheel. The expected model is a downward chain of 12 discs with a
+the mouse wheel. The expected model is a downward chain of 6 discs with a
 blue base, gray body, orange one-third gauges, and cyan two-thirds gauges.
 In Isaac Sim the free final disc is red. The RViz reconstruction currently
 renders that final disc gray; this color difference is not a tracking error.
@@ -178,7 +186,7 @@ python3 scripts/control_soft_limb_working.py --ros-args \
 - `phi_position`: total bend magnitude in degrees.
 - `theta_position`: bend direction around the limb in degrees.
 
-The total bend is distributed over 11 disc intervals. Each dual-D6 A/B joint
+The total bend is distributed over 5 disc intervals. Each dual-D6 A/B joint
 receives half of its interval angle. The requested angle stays as the PhysX
 drive target while the acceleration drive generates mass-dependent corrective
 torque from position and velocity error. Targets ramp at no more than 20°/s to
@@ -191,9 +199,15 @@ ros2 param set /soft_limb_position_controller theta_position 180.0
 
 Run only one soft-limb controller at a time.
 
-The current source default is `phi_position=180.0` and
+The current source default is `phi_position=90.0` and
 `theta_position=0.0`. Supplying explicit command-line parameters is therefore
 recommended. The hybrid controller defaults to zero torque and zero direction.
+
+The position controller accepts total phi up to ±180°. At 180° the five
+intervals each receive 36°: the base D6 receives 36°, and each later serial
+A/B joint receives 18°. Physical X/Y joint limits are ±40° to accommodate
+this without clipping. Larger total requests are clamped with a warning;
+theta still selects directions around the full circumference.
 
 Commanded phi is the orientation change between the base and tip discs, not
 the angle of the straight base-to-tip chord. For an ideal 90° circular arc,
@@ -234,6 +248,10 @@ rotY =  phi * cos(theta)
 
 Theta wraps around the circumference. For example, 0°, 90°, 180°, and 270°
 select four transverse bending directions.
+This two-axis drive mapping is approximate at large diagonal bends. A headless
+180° test at theta=0 measured 179.9996° with a steady final angle; at theta=45°
+it measured about 178.93° but retained about 10.25° of full tip-orientation error.
+Exact large-angle diagonal constant-curvature tracking remains a limitation.
 
 ## ROS 2 interface summary
 
@@ -243,8 +261,8 @@ The supplied control scripts publish at 20 Hz. The simulator node
 | Joint group | Position mode | Hybrid mode |
 |---|---|---|
 | Base | `/soft_limb/pair_00/base/roll/position`, `/yaw/position` | `/soft_limb/pair_00/base/roll/torque`, `/yaw/position` |
-| A half, pairs 01–10 | `/soft_limb/pair_XX/d6_a/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_a/roll/torque`, `/yaw/position` |
-| B half, pairs 01–10 | `/soft_limb/pair_XX/d6_b/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_b/roll/torque`, `/yaw/position` |
+| A half, pairs 01–04 | `/soft_limb/pair_XX/d6_a/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_a/roll/torque`, `/yaw/position` |
+| B half, pairs 01–04 | `/soft_limb/pair_XX/d6_b/roll/position`, `/yaw/position` | `/soft_limb/pair_XX/d6_b/roll/torque`, `/yaw/position` |
 
 Normal operation should use the supplied controller parameters rather than
 publishing all of these low-level topics individually.
@@ -253,11 +271,15 @@ publishing all of these low-level topics individually.
 
 | Station | Disc | Circumferential positions | Color |
 |---|---:|---|---|
-| `one_third` | `Disk_04` | 0°, 120°, 240° | Orange |
-| `two_thirds` | `Disk_07` | 180°, 300°, 60° | Cyan |
+| `one_third` | `Disk_02` | 0°, 120°, 240° | Orange |
+| `two_thirds` | `Disk_03` | 180°, 300°, 60° | Cyan |
 
 The second ring is offset 180° from the first. Since each ring repeats every
 120°, this is visible geometrically as a 60° stagger.
+
+For six discs, the exact thirds fall between discs. These rings are on the
+nearest symmetric pair at 40% and 60% of the base-to-tip centerline. Topic
+station names are preserved for compatibility.
 
 Readings are calculated from live disc poses, not control targets. They respond
 to position control, torque control, gravity/contact, and manual manipulation.
@@ -313,9 +335,9 @@ adhesive layer, or limb material.
 ### RViz reconstruction
 
 The two gauge rings reconstruct local X/Y curvature. Curvature is interpolated
-over 11 intervals. Each RViz interval uses an exact symmetric circular-arc
+over 5 intervals. Each RViz interval uses an exact symmetric circular-arc
 transform: direction rotation, half-spacing translation, bend rotation,
-half-spacing translation, and inverse direction rotation. This uses 33 RViz
+half-spacing translation, and inverse direction rotation. This uses 15 RViz
 joints and makes the extended radial disc lines share a common curvature
 center when the measured curvature is constant. Arbitrary shapes between the
 two stations are still approximated because two measurement sections cannot
@@ -447,9 +469,15 @@ python3 scripts/control_quadraped.py
 - `scripts/control_soft_limb_working.py` — position controller.
 - `scripts/control_soft_limb_hybrid_working.py` — hybrid controller.
 - `scripts/plot_strain_gauges_working.py` — six live microstrain graphs.
-- `soft_world/robot_description_working.py` — generated 12-disc RViz URDF.
-- `usd/soft_limb_hanging_working.usd` — active hanging asset.
-- `usd/soft_limb_position_control_working.usd` — working position asset.
+- `soft_world/robot_description_working.py` — generated 6-disc RViz URDF.
+- `usd/soft_limb_hanging_6_disc_working.usd` — active six-disc hanging asset.
+- `usd/soft_limb_position_control_6_disc_working.usd` — six-disc position asset.
+- `scripts/create_six_disc_assets_working.py` — regenerates both variants using
+  Isaac Sim's fully initialized native generators (requires a working GPU).
+- `scripts/verify_bend_working.py` — bounded headless physical bend/stability
+  verification, using the active loader's drives and compensation.
+- `scripts/update_six_disc_geometry_working.py` — updates authored native
+  six-disc spacing, anchors, and limits using a USD-enabled interpreter.
 - `scripts/soft_limb_hang_working.py` and `scripts/soft_limb_working.py` — USD
   generators.
 

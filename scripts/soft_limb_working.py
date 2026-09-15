@@ -16,16 +16,16 @@ from pxr import Gf, PhysxSchema, Sdf, UsdGeom, UsdPhysics, UsdShade
 import numpy as np
 
 
-DISK_COUNT = 12
+DISK_COUNT = 6
 DISK_THICKNESS = 0.005  # 0.5 cm
 DISK_GAP = 0.02  # 2 cm clear space between disk faces
 DISK_PITCH = DISK_THICKNESS + DISK_GAP
 START_HEIGHT = 0.03
 
 # Position-drive parameters shared by the standalone limb and quadruped.
-BEND_STIFFNESS = 1_000_000
-BEND_DAMPING = 100
-MAX_BEND_DEGREES = 25.0
+BEND_STIFFNESS = 6400
+BEND_DAMPING = 240
+MAX_BEND_DEGREES = 40.0
 VIRTUAL_LINK_OFFSET = 0.0005  # 0.5 mm between the two serial joints
 VIRTUAL_LINK_MASS = 0.01
 VIRTUAL_LINK_INERTIA = 1.0e-6
@@ -38,7 +38,7 @@ JOINTS_PATH = f"{ASSEMBLY_PATH}/Joints"
 VIRTUAL_LINKS_PATH = f"{ASSEMBLY_PATH}/VirtualLinks"
 MATERIALS_PATH = f"{ASSEMBLY_PATH}/Materials"
 SOURCE_PRIM_PATH = Sdf.Path("/World/SoftDisk")
-OUTPUT_USD_NAME = "soft_limb_position_control_working.usd"
+OUTPUT_USD_NAME = "soft_limb_position_control_6_disc_working.usd"
 
 
 def get_disk_usd_path():
@@ -137,7 +137,7 @@ def configure_d6_axes(joint_prim, length_scale):
             joint_prim, axis, -MAX_BEND_DEGREES, MAX_BEND_DEGREES
         )
         drive = UsdPhysics.DriveAPI.Apply(joint_prim, axis)
-        drive.CreateTypeAttr().Set("force")
+        drive.CreateTypeAttr().Set("acceleration")
         drive.CreateTargetPositionAttr().Set(0.0)
         drive.CreateStiffnessAttr().Set(length_scale * BEND_STIFFNESS)
         drive.CreateDampingAttr().Set(length_scale * BEND_DAMPING)

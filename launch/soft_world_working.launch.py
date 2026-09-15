@@ -35,7 +35,7 @@ def generate_launch_description():
             script_path
         ],
         additional_env={
-            "SOFT_LIMB_USD_NAME": "soft_limb_hanging_working.usd",
+            "SOFT_LIMB_USD_NAME": "soft_limb_hanging_6_disc_working.usd",
         },
         output="screen"
     )

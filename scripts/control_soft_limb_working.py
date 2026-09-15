@@ -7,12 +7,13 @@ from rclpy.node import Node
 from std_msgs.msg import Float64
 
 
-JOINT_COUNT = 11
+JOINT_COUNT = 5
 PUBLISH_RATE_HZ = 20.0
-PHI_POSITION_DEGREES = 0.0
+PHI_POSITION_DEGREES = 90.0
+MAX_TOTAL_BEND_DEGREES = 180.0
 THETA_POSITION_DEGREES = 0.0
 
-j
+
 class SoftLimbPositionPublisher(Node):
     """Publish phi bend magnitude and theta direction."""
 
@@ -20,6 +21,7 @@ class SoftLimbPositionPublisher(Node):
         super().__init__("soft_limb_position_controller")
         self._position_publishers = {}
         self._last_command = None
+        self._last_clipped_phi = None
 
         self.declare_parameter("phi_position", PHI_POSITION_DEGREES)
         self.declare_parameter(
@@ -60,6 +62,21 @@ class SoftLimbPositionPublisher(Node):
     def publish_positions(self):
         """Distribute one total constant-curvature arc command."""
         phi_position = float(self.get_parameter("phi_position").value)
+        requested_phi = phi_position
+        phi_position = max(
+            -MAX_TOTAL_BEND_DEGREES,
+            min(MAX_TOTAL_BEND_DEGREES, phi_position),
+        )
+        if requested_phi != phi_position:
+            if requested_phi != self._last_clipped_phi:
+                self.get_logger().warning(
+                    f"Requested phi {requested_phi:.3f} exceeds the "
+                    f"six-disc uniform bend range; using {phi_position:.3f} "
+                    "degrees to avoid clipping only the base joint."
+                )
+            self._last_clipped_phi = requested_phi
+        else:
+            self._last_clipped_phi = None
         theta_position = float(
             self.get_parameter("theta_position").value
         )

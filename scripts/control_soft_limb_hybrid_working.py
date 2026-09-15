@@ -7,7 +7,7 @@ from rclpy.node import Node
 from std_msgs.msg import Float64
 
 
-JOINT_COUNT = 11
+JOINT_COUNT = 5
 PUBLISH_RATE_HZ = 20.0
 
 # Phi is roll torque in N*m; theta is yaw position in degrees.

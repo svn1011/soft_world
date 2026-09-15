@@ -7,7 +7,9 @@ import os
 from isaacsim import SimulationApp
 
 
-simulation_app = SimulationApp({"headless": False})
+simulation_app = SimulationApp({
+    "headless": os.environ.get("SOFT_LIMB_HEADLESS", "0") == "1",
+})
 
 import numpy as np
 from isaacsim.core.api import World
@@ -22,18 +24,17 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64, Float64MultiArray
 
 
-JOINT_COUNT = 11
-MAX_ABS_BEND_POSITION_DEGREES = 25.0
+JOINT_COUNT = 5
+MAX_ABS_BEND_POSITION_DEGREES = 40.0
 MAX_TARGET_SPEED_DEGREES_PER_SECOND = 20.0
 MAX_ABS_TORQUE = 1_000_000.0
 MAX_TORQUE_SLEW_RATE = 2_000_000.0
-# Mass-normalized second-order servo gains (natural frequency 80 rad/s,
-# damping ratio 1.5 at the full-interval joint).
+# Restore the stable 25 mm-interval mass-normalized drive gains.
 BEND_STIFFNESS = 6400
 BEND_DAMPING = 240
-MAX_BEND_DEGREES = 25.0
+MAX_BEND_DEGREES = 40.0
 SOFT_LIMB_USD_NAME = os.environ.get(
-    "SOFT_LIMB_USD_NAME", "soft_limb_position_control_working.usd"
+    "SOFT_LIMB_USD_NAME", "soft_limb_position_control_6_disc_working.usd"
 )
 PHYSICS_FREQUENCY_HZ = 240.0
 SOLVER_POSITION_ITERATIONS = 32
@@ -47,8 +48,8 @@ DISK_PITCH = 0.025
 DISK_RADIUS = 0.02
 STRAIN_TO_MICROSTRAIN = 1_000_000.0
 SENSOR_STATIONS = (
-    ("one_third", 4, (0.0, 120.0, 240.0), Gf.Vec3f(1.0, 0.45, 0.0)),
-    ("two_thirds", 7, (180.0, 300.0, 60.0), Gf.Vec3f(0.0, 0.8, 1.0)),
+    ("one_third", 2, (0.0, 120.0, 240.0), Gf.Vec3f(1.0, 0.45, 0.0)),
+    ("two_thirds", 3, (180.0, 300.0, 60.0), Gf.Vec3f(0.0, 0.8, 1.0)),
 )
 MASTER_LIMB_PATH = "/World/SoftLimb"
 
@@ -374,7 +375,6 @@ class SoftLimbCommandSubscriber(Node):
     def update_drive_targets(self, time_step):
         """Move the mass-normalized servo targets toward live commands."""
         max_step = MAX_TARGET_SPEED_DEGREES_PER_SECOND * time_step
-        nominal_targets = []
         for command, applied, x_target, y_target in self._drive_targets:
             applied[0] += np.clip(
                 command[0] - applied[0], -max_step, max_step
@@ -386,22 +386,8 @@ class SoftLimbCommandSubscriber(Node):
                 direction_delta, -max_step, max_step
             )
             direction = np.deg2rad(applied[1])
-            # Webster/Jones convention: theta=0 bends about +Y toward +X.
-            nominal_targets.append(
-                np.array(
-                    [
-                        -applied[0] * np.sin(direction),
-                        applied[0] * np.cos(direction),
-                    ],
-                    dtype=np.float64,
-                )
-            )
-
-        for index, (_, _, x_target, y_target) in enumerate(
-            self._drive_targets
-        ):
-            x_target.Set(float(nominal_targets[index][0]))
-            y_target.Set(float(nominal_targets[index][1]))
+            x_target.Set(float(-applied[0] * np.sin(direction)))
+            y_target.Set(float(applied[0] * np.cos(direction)))
 
         max_torque_step = MAX_TORQUE_SLEW_RATE * time_step
         torque_groups = (
@@ -762,7 +748,7 @@ def main():
     print("Phi position      : .../roll/position (bend degrees)")
     print("Phi torque        : .../roll/torque (N*m)")
     print("Theta direction   : .../yaw/position (direction degrees)")
-    print("Command sets      : base plus pair_01..10/d6_a and d6_b")
+    print("Command sets      : base plus pair_01..04/d6_a and d6_b")
     print("Position units    : degrees")
     print(
         f"Bend limit        : +/-{MAX_ABS_BEND_POSITION_DEGREES} degrees"
@@ -785,8 +771,8 @@ def main():
     print("Joint projection  : disabled (deprecated)")
     print("Joint topology    : 1 base D6, then 2 serial D6 per pair")
     print("Physics to USD    : live updates enabled")
-    print("Sensor station 1  : Disk_04 at 0, 120, 240 degrees")
-    print("Sensor station 2  : Disk_07 at 180, 300, 60 degrees")
+    print("Sensor station 1  : Disk_02 at 0, 120, 240 degrees")
+    print("Sensor station 2  : Disk_03 at 180, 300, 60 degrees")
     print("Sensor strain     : microstrain, measured from live poses")
     print("Sensor orientation: relative W-X-Y-Z quaternion")
     print("Sensor topics     : /soft_limb/sensors/<station>/...")
