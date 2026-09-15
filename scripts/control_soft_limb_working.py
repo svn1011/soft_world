@@ -5,9 +5,9 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
+from limb_configuration_working import JOINT_COUNT, interval_bend
 
 
-JOINT_COUNT = 5
 PUBLISH_RATE_HZ = 20.0
 PHI_POSITION_DEGREES = 90.0
 MAX_TOTAL_BEND_DEGREES = 180.0
@@ -39,7 +39,8 @@ class SoftLimbPositionPublisher(Node):
 
         self.create_timer(1.0 / PUBLISH_RATE_HZ, self.publish_positions)
         self.get_logger().info(
-            "Publishing phi bend position and theta bend direction"
+            "SIX-DISC controller: five intervals; final disc Disk_05. "
+            "Publishing total phi bend position and theta bend direction"
         )
 
     def _add_joint_publishers(self, topic_root):
@@ -89,19 +90,19 @@ class SoftLimbPositionPublisher(Node):
             )
             self._last_command = command
 
-        interval_bend = phi_position / JOINT_COUNT
+        bend_per_interval = interval_bend(phi_position)
         self._publish_joint(
-            "/soft_limb/pair_00/base", interval_bend, theta_position
+            "/soft_limb/pair_00/base", bend_per_interval, theta_position
         )
         for pair_index in range(1, JOINT_COUNT):
             self._publish_joint(
                 f"/soft_limb/pair_{pair_index:02d}/d6_a",
-                0.5 * interval_bend,
+                0.5 * bend_per_interval,
                 theta_position,
             )
             self._publish_joint(
                 f"/soft_limb/pair_{pair_index:02d}/d6_b",
-                0.5 * interval_bend,
+                0.5 * bend_per_interval,
                 theta_position,
             )
 

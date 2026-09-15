@@ -1,0 +1,837 @@
+\documentclass[11pt,letterpaper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,longtable,array}
+\usepackage{xcolor,listings}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{pdftitle={SoftWorld Research Development Record}}
+\lstset{basicstyle=\ttfamily\footnotesize,breaklines=true,
+  columns=fullflexible,keepspaces=true,frame=single,
+  showstringspaces=false}
+\newcommand{\microstrain}{\ensuremath{\mu\varepsilon}}
+\newcommand{\degrees}{\ensuremath{^{\circ}}}
+\title{SoftWorld: Development and Preliminary Verification of a\newline
+  Disc-Based Soft-Limb Simulation with Virtual Strain Sensing\newline
+  \large Research Development Record --- Working Configuration}
+\author{Author: [Insert researcher name]\\
+  MSET graduate student, ETID\\Texas A\&M University}
+\date{Documentation snapshot: September 15, 2026}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+This report documents the development of a ROS~2/Isaac Sim platform for
+commanding a compliant disc-based limb, estimating bending strain from its
+measured orientations, and reconstructing its shape in RViz. The active
+configuration contains six discs, five disc-to-disc intervals, and two rings
+of three virtual strain gauges. Development included position and hybrid
+control scripts, hanging-base geometry, damping changes, independent
+pose-derived sensing, live strain plots, and migration from a second simulated
+limb to a sensor-driven visualization. A verified controller-topology mismatch
+caused a requested 180\degrees{} bend to produce approximately 81.818\degrees{}:
+commands retained the twelve-disc controller's eleven-interval normalization.
+The working loader now converts identified legacy position targets to the
+five-interval configuration. An end-to-end headless test using the original
+controller measured 179.9996\degrees{} at the sixth disc. These results establish
+a bounded software regression result, not physical material validation or
+general constant-curvature accuracy. Large-angle diagonal orientation errors,
+sensor-model assumptions, and unvalidated hybrid behavior remain explicitly
+identified limitations.
+\end{abstract}
+
+\noindent\textbf{Document status.} This is a research-oriented technical record,
+not a completed thesis, peer-reviewed publication, or institutionally approved
+experimental protocol. It distinguishes source-code facts, recorded numerical
+tests, user observations, historical requests, and proposed future experiments.
+Author identity, advisor, research objectives, and thesis-specific requirements
+must be supplied by the researcher. No physical experiment is claimed.
+
+\tableofcontents
+\newpage
+
+\section{Research context, objectives, and scope}
+The researcher identified this project as part of MSET research in ETID at
+Texas A\&M University. The present engineering objective is to develop a
+repeatable simulation workflow for compliant limb actuation and
+orientation-derived shape sensing. The long-term concept is to reproduce the
+configuration of a leader limb from sensor readings without providing those
+leader commands to the reconstruction system.
+
+The active workflow is:
+\begin{center}
+\begin{tabular}{c}
+Position or torque command\\$\downarrow$\\
+Physical disc-chain leader in Isaac Sim\\$\downarrow$\\
+Six orientation-derived virtual strain readings\\$\downarrow$\\
+Local curvature reconstruction and interpolation\\$\downarrow$\\
+\texttt{/joint\_states} and robot-state publisher\\$\downarrow$\\
+TF and sensor-driven limb visualization in RViz
+\end{tabular}
+\end{center}
+
+The word ``physical'' above means the physics-simulated leader, not laboratory
+hardware. The RViz model is a kinematic visualization, not a dynamically
+actuated second robot. The earlier two-limb Isaac configuration is retained
+as a backup. Earlier quadruped work is recorded as development history;
+the quadruped is separate from the currently verified six-disc workflow.
+
+\section{Evidence and documentation provenance}
+This report is based on the development conversation, the repository README,
+inspection of the working Python files, and available verification logs.
+The supplied Webster--Jones review was consulted for the conceptual distinction
+between robot-independent constant-curvature kinematics and robot-specific
+actuation mappings~\cite{webster2010}. Equations labeled as implementation
+equations describe this repository and should not be attributed wholesale
+to that review.
+
+The repository's base Git revision at documentation time was
+\begin{lstlisting}
+e3e976c97e63596887ccb22e03ad33523c25db72
+\end{lstlisting}
+The working tree contained additional modified and untracked files, including
+the latest topology correction. Consequently, that revision alone does not
+reproduce this snapshot. A durable research release should commit the intended
+source, USD assets, documentation, and validation records together and record
+the resulting revision and asset hashes.
+
+The numerical excerpts in Appendix~\ref{app:results} are copied from available
+test output. They are not averages across repeated trials. Historical changes
+without a retained quantitative test are described as development events, not
+established performance improvements.
+
+\section{Development history and disposition}
+\begin{longtable}{p{0.23\linewidth}p{0.70\linewidth}}
+\toprule
+Development stage & Purpose and current disposition\\\midrule
+\endhead
+Initial limb control & Investigated initial bending, loss of commanded pose,
+and returning toward rest. Holding position, stiffness, and damping became
+recurring requirements. Early intermediate values are not reconstructed here
+without retained evidence.\\
+Saved limb and quadruped & Requested new USD versions and reuse in a soft
+quadruped. A ROS publisher failure exposed use of a dictionary for
+\texttt{\_publishers}, which conflicts with rclpy's internal publisher list.
+Ground hanging constraints, body curvature, and jelly-like motion were also
+addressed during earlier development. The quadruped remains a separate,
+historical implementation, not a validated deployment of the current limb.\\
+Hanging limb and launch & Moved the fixed base into the air and hung the limb
+downward. Corrected the workflow around missing installed loader paths by
+rebuilding and locating scripts through the installed package.\\
+Control alternatives & Separated position control from hybrid control:
+phi position versus phi torque, with theta selecting the bending plane.
+Several direction-range and correction attempts were rolled back. Hybrid
+control remains preliminary.\\
+Constant curvature and frames & Used the continuum-kinematics review to
+guide bending conventions. Disc-axis visualization was requested, added,
+and subsequently rolled back. Disc axes are not an active feature. The
+intersection of disc radial lines was raised as a geometric accuracy issue.\\
+Unexpected startup bend & Investigated possible lingering ROS controllers
+after forced VS Code termination. Startup targets are zero, but live external
+commands can still bend the limb; zero startup targets are not command isolation.\\
+Working-file policy & Established a rule to make subsequent implementation
+changes in files named \texttt{working}, preserving older files as backups.\\
+Virtual sensing & Added six pose-derived virtual gauges that respond to
+actual motion, including manual manipulation without a controller.\\
+Follower and RViz & Initially used a second simulated limb; retained that
+version as an in-simulation backup, then replaced the active follower with
+sensor-driven RViz reconstruction. Added robot description, joint states,
+robot-state publisher, and a map-to-root transform.\\
+Visualization and plots & Addressed RViz/Snap library conflicts and the
+missing map frame. Added six live strain plots and portable ZIP/build
+instructions in the README.\\
+Holding and accuracy & Tuned acceleration drives, body damping, solver
+settings, and gravity compensation to improve holding in the working limb.
+This does not establish physical material stiffness.\\
+Six-disc transition & Reduced twelve discs to six, after rollback/reapplication,
+and generated dedicated six-disc assets. An asset-generation crash motivated
+native Isaac generation rather than relying on a renderer-free flattened asset.\\
+Shorter spacing & Reduced a temporary 55~mm pitch to 25~mm, changing clear
+spacing from 50~mm to 20~mm while retaining six discs. Updated geometry,
+anchors, gains, and RViz spacing together.\\
+Topology correction & The user measured 81.8181568\degrees{} for a requested
+180\degrees{}. Identified the eleven-versus-five normalization mismatch;
+added graph-identified legacy position conversion and verified the sixth disc.\\
+\bottomrule
+\end{longtable}
+
+This chronology is thematic rather than a timestamped commit log. Rolled-back
+experiments must not be presented as features of the current configuration.
+
+\section{Simulation model and current geometry}
+The limb is a finite rigid-disc/virtual-link chain with compliant joint drives.
+It is not a finite-element model of a continuous elastomer and does not provide
+a resolved material stress or strain field. Continuum terminology describes
+its intended shape approximation and sensing model.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lll}
+\toprule
+Quantity & Symbol & Working value\\\midrule
+Disc count & $N$ & 6\\
+Disc-to-disc interval count & $M=N-1$ & 5\\
+Disc thickness & $t$ & 0.005~m\\
+Clear spacing & $g$ & 0.020~m\\
+Disc-center pitch & $d=t+g$ & 0.025~m\\
+Straight base-to-tip nominal length & $L_0=Md$ & 0.125~m\\
+Gauge/disc radius & $r$ & 0.020~m\\
+Hanging generator base elevation & $z_0$ & 0.400~m\\
+Runtime disc mass constant & $m_d$ & 0.010~kg\\
+Virtual-link mass constant & $m_v$ & 0.010~kg\\
+Virtual-link separation & $h$ & 0.0005~m\\
+\bottomrule
+\end{tabular}
+\caption{Source configuration, not measured hardware dimensions or calibrated
+material properties. Mass constants are also used in gravity compensation;
+asset mass agreement should be checked for each research release.}
+\end{table}
+
+The hanging generator places disc $i$ at
+$\mathbf{p}_i=(0,0,z_0-id)$ in the straight configuration. The base is kinematic;
+the subsequent discs are movable. Numbering is zero-based: the first disc is
+\texttt{Disk\_00}, and the sixth/final disc is \texttt{Disk\_05}, not
+\texttt{Disk\_06}. The Isaac final disc is red; the current RViz final disc is
+gray. Color does not identify an independent measurement channel.
+
+The first interval has one base D6 joint. Each of the other four intervals
+has two serial D6 joints, A and B, connected through a virtual link. There are
+therefore nine active bending joints, not five individual D6 joints.
+Translation and local rotZ are locked; rotX and rotY are driven. The working
+topology definition and stage guard require exactly the six intended discs.
+The rigid-disc view uses explicitly ordered paths, and tip sensing explicitly
+selects index~5.
+
+\section{Constant-curvature reference kinematics}
+\subsection{Ideal continuous section}
+For a planar constant-curvature section of arc length $L$, bending magnitude
+$\Phi$, and bending-plane direction $\Theta$,
+\begin{equation}
+\kappa=\frac{\Phi}{L},\qquad R=\frac{1}{\kappa},\qquad
+\mathbf{a}(\Theta)=(-\sin\Theta,\cos\Theta,0)^T.
+\end{equation}
+Angles in equations are radians. A reference convention with straight
+extension along positive local Z has
+\begin{align}
+\mathbf{p}(s)&=\begin{bmatrix}
+(1-\cos(\kappa s))\cos\Theta/\kappa\\
+(1-\cos(\kappa s))\sin\Theta/\kappa\\
+\sin(\kappa s)/\kappa
+\end{bmatrix},\\
+\mathbf{R}(s)&=R_z(\Theta)R_y(\kappa s)R_z(-\Theta).
+\end{align}
+The $\kappa\rightarrow0$ limit is a straight section. The hanging implementation
+uses negative-Z translations, so position signs must be mapped consistently
+when comparing it with this positive-Z reference convention.
+
+Theta denotes the plane of bending, not an independently commanded physical
+twist. Total phi is base-to-tip orientation change, not the inclination of the
+base-to-tip chord. For an ideal planar 90\degrees{} arc, that chord is inclined
+approximately 45\degrees{} from the initial tangent.
+
+\subsection{Radial-line intersection criterion}
+For a circular planar centerline, each disc plane should be normal to the local
+tangent. The radial line \emph{in the bending plane} through each disc center
+then passes through one common center of curvature. Arbitrary lines within
+the disc plane do not satisfy this criterion. A straight limb has no finite
+center of curvature, and nonuniform curvature generally has no single center.
+
+A future quantitative check should fit a circle to measured disc centers,
+test disc-normal/tangent agreement, and report distances from that fitted
+center to the corresponding radial lines. Visual agreement alone is not an
+adequate numerical constant-curvature test.
+
+\subsection{Discrete model versus an inextensible continuous arc}
+The RViz URDF implements each interval through three revolute coordinates,
+with the composition
+\begin{equation}
+T_i=R_z(\theta_i)T_z(-d/2)R_y(\beta_i)
+             T_z(-d/2)R_z(-\theta_i).
+\label{eq:urdf}
+\end{equation}
+Its transmitted coordinates are $(\theta_i,\beta_i,-\theta_i)$.
+This symmetric construction provides a disc orientation and hinge-based
+position, but must not be confused with an exact continuous arc of fixed
+length $d$. Its disc-center chord length is
+\begin{equation}
+c_i=d\cos(\beta_i/2).
+\end{equation}
+For a uniform planar bend, its equivalent circular radius is
+\begin{equation}
+R_{\mathrm{hinge}}=\frac{d}{2}\cot(\beta_i/2),\qquad
+\ell_{\mathrm{equivalent}}=\beta_i R_{\mathrm{hinge}},
+\end{equation}
+whereas an inextensible constant-curvature interval would have
+$R_{\mathrm{arc}}=d/\beta_i$ and chord
+$2(d/\beta_i)\sin(\beta_i/2)$. These agree only in the small-angle limit.
+Thus, fixed nominal pitch and equal orientation increments alone do not prove
+fixed arc length during bending. The virtual-link offsets and physics leader
+geometry introduce further details requiring separate positional validation.
+
+\section{Position control and holding behavior}
+\subsection{Distribution over the active topology}
+For total commanded bend $\Phi_c$, the working controller calculates
+\begin{equation}
+\beta=\frac{\Phi_c}{M}=\frac{\Phi_c}{5},\qquad
+\beta_{\mathrm{base}}=\beta,\qquad
+\beta_{A,j}=\beta_{B,j}=\frac{\beta}{2}\quad(j=1,\ldots,4).
+\end{equation}
+For 180\degrees{}, this is 36\degrees{} at the base and 18\degrees{} at each
+split joint. The algebraic sum of all nine scalar bend targets is 180\degrees{}.
+The working controller clamps total requests to $\pm180$\degrees{}; local
+X/Y position limits are $\pm40$\degrees{}.
+
+Each drive receives the implementation mapping
+\begin{equation}
+q_x=-\beta_j\sin\Theta,\qquad q_y=\beta_j\cos\Theta.
+\label{eq:drive}
+\end{equation}
+This is not generally equivalent to one exact axis-angle rotation at finite
+angles. Physical joint coordinate coupling matters for diagonal bends;
+Section~\ref{sec:validation} reports the observed limitation.
+
+\subsection{Drive and solver configuration}
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Parameter & Working runtime value\\\midrule
+Drive type & Acceleration (mass-normalized)\\
+Base stiffness / damping & 6400 / 240\\
+Split A/B stiffness / damping & 12800 / 480\\
+Linear / angular body damping & 2.0 / 10.0\\
+Physics frequency & 240~Hz\\
+Position / velocity solver iterations & 32 / 8\\
+Controller publishing frequency & 20~Hz\\
+Local target slew limit & 20\degrees{}/s\\
+Torque magnitude limit & $10^6$~N\,m (software bound)\\
+Torque slew limit & $2\times10^6$~N\,m/s (software bound)\\
+\bottomrule
+\end{tabular}
+\end{center}
+These are simulator drive settings, not measured Young's modulus, beam
+rigidity, or a calibrated physical damper. The torque bounds are especially
+not hardware-safe operating specifications.
+
+In position mode, the loader applies upward forces equal to the configured
+disc and virtual-link weights, using $g=9.81$~m/s$^2$. This explicitly
+compensates gravity; the reported holding test should therefore not be
+described as uncompensated, payload-bearing behavior. Compensation is disabled
+when a nonzero direct phi torque command is active. A zero-torque hybrid
+command consequently does not, by itself, establish a gravity-loaded torque
+mode experiment.
+
+Targets are ramped locally rather than corrected instantaneously. Since base
+and split targets have different magnitudes but share the same local slew
+rate, uniform final targets do not guarantee uniform curvature during the
+transition. No settling-time sweep or transient constant-curvature proof
+has yet been recorded.
+
+\section{Confirmed twelve-to-six-disc normalization failure}
+The preserved original position controller has eleven intervals. If it
+publishes a 180\degrees{} total request to a five-interval leader, the final
+disc receives only
+\begin{equation}
+\Phi_{\mathrm{actual}}\simeq5\left(\frac{180\degrees}{11}\right)
+  =81.81818\degrees.
+\end{equation}
+The user's reported tip reading was 81.81815680578234\degrees{}, numerically
+consistent with this mismatch. The result is a command-normalization problem,
+not evidence that additional stiffness is required.
+
+The working loader now identifies the known position controller through the
+ROS publisher graph. A complete contiguous set of A/B publisher pairs is used
+to distinguish five-interval from eleven-interval sources. For an identified
+legacy source,
+\begin{equation}
+q_{\mathrm{adapted}}=q_{\mathrm{received}}\frac{11}{5}.
+\end{equation}
+Scaling happens before the local position clamp. A warning reports conversion.
+The working five-interval controller is not scaled again, and torque targets
+are not adapted. Manual publishers with a different identity are unchanged.
+
+The local source-built Humble rclpy delivers subscription messages without
+publisher-message metadata. The adapter therefore requires an unambiguous
+publisher for each topic and verifies node identity through graph endpoints.
+Incomplete discovery is retried. Multiple publishers or duplicate controller
+identities make conversion ambiguous; a warning/error is issued and automatic
+conversion is disabled. This is compatibility handling, not a guarantee against
+all conflicting ROS commands. Run one controller only. It recognizes the
+specified original topology and controller identity, not arbitrary remapped
+or renamed controllers.
+
+\section{Hybrid control: implemented interface, preliminary status}
+The hybrid script publishes phi as bending torque and theta as bending-plane
+position. The loader converts each scalar torque into an axis in the body's
+current world orientation and applies equal/opposite body torques across the
+corresponding joint. The same requested scalar effort is published to each
+joint; it is not divided as a total bend angle.
+
+Unlike position control, a torque command does not specify or guarantee a
+final angle. Local position targets return toward zero when direct torque is
+commanded, so restoring drives and damping remain part of the response.
+Hybrid operation, effort calibration, loaded equilibrium, and performance
+are not validated by the position-mode tests presented here. Large illustrative
+torque values in operational examples must not be transferred to hardware.
+
+\section{Six virtual strain gauges}
+\subsection{Placement and retained topic names}
+\begin{center}
+\begin{tabular}{llll}
+\toprule
+Station & Disc & $s/L_0$ & Angles about circumference\\\midrule
+\texttt{one\_third} & \texttt{Disk\_02} & 0.40 & 0\degrees{},120\degrees{},240\degrees{}\\
+\texttt{two\_thirds} & \texttt{Disk\_03} & 0.60 & 180\degrees{},300\degrees{},60\degrees{}\\
+\bottomrule
+\end{tabular}
+\end{center}
+The original placement requirement was one-third and two-thirds of the limb
+length. With six discs, exact thirds lie between discs; the working rings
+use the nearest symmetric pair at 40\% and 60\%. Topic names are retained
+for compatibility. The second set is offset by 180\degrees{}; threefold
+120\degrees{} symmetry makes the combined rings appear staggered by 60\degrees{}.
+
+\subsection{Measured orientation to local curvature}
+Let $q_i$ be the normalized disc orientation, represented as a quaternion
+in $[w,x,y,z]$ order. At sensor disc $i$, the implementation forms
+\begin{equation}
+q_{\mathrm{rel},i}=q_{i-1}^{-1}q_{i+1},\qquad
+\boldsymbol{\omega}_i=\operatorname{rotvec}(q_{\mathrm{rel},i}).
+\end{equation}
+Quaternion sign is chosen so that the scalar part is nonnegative; the rotation
+vector consequently uses a shortest-path rotation. The local curvature
+estimate is
+\begin{equation}
+\hat\kappa_{x,i}=\frac{\omega_{x,i}}{2d},\qquad
+\hat\kappa_{y,i}=\frac{\omega_{y,i}}{2d},\qquad 2d=0.050~\mathrm{m}.
+\label{eq:kappa}
+\end{equation}
+For the first ring this uses discs 1 and 3; for the second it uses discs 2 and 4.
+Z rotation is not used in the bending-strain estimate. These are nominal-spacing
+finite-difference estimates, not differentiation of a measured deformable
+centerline. The orientation difference is expressed relative to the preceding
+disc; interpretation as centered curvature is approximate for general
+nonplanar bending.
+
+\subsection{Curvature to virtual axial strain}
+For a gauge angle $\alpha$, its nominal coordinates are
+$x=r\cos\alpha$, $y=r\sin\alpha$. The implemented strain convention is
+\begin{equation}
+\hat\varepsilon_i(\alpha)
+ =-\hat\kappa_{x,i}y+\hat\kappa_{y,i}x
+ =r\left(\hat\kappa_{y,i}\cos\alpha
+              -\hat\kappa_{x,i}\sin\alpha\right).
+\label{eq:strain}
+\end{equation}
+This is dimensionless. The published reading is
+\begin{equation}
+\hat\varepsilon_{\microstrain}=10^6\hat\varepsilon.
+\end{equation}
+For example, 10,000~\microstrain{} corresponds to a strain magnitude of 0.01,
+or 1\%. Positive and negative readings represent opposite bending sides
+under the implementation's coordinate convention; their correspondence to
+physical tensile/compressive polarity must be checked against a hardware
+gauge installation and longitudinal-axis convention.
+
+For ideal uniform curvature, substituting
+$(\kappa_x,\kappa_y)=\kappa(-\sin\Theta,\cos\Theta)$ gives
+\begin{equation}
+\varepsilon(\alpha)=r\kappa\cos(\alpha-\Theta).
+\end{equation}
+The ideal three-gauge ring has zero summed bending strain. A theoretical
+90\degrees{} bend over nominal length 0.125~m yields
+$r\kappa\approx0.2513$, or about 251,327~\microstrain{} at the extreme gauge
+position. This large value is a consequence of the assumed radius and
+kinematic equation, not a calibrated prediction for a practical gauge or
+proof that a real material can sustain that deformation. It is a calculated
+illustration, not a retained simulation measurement.
+
+\subsection{Independence from command and physical limitations}
+Readings use live disc poses, not desired phi or theta. They therefore respond
+to actual simulated motion and manually changed orientations without requiring
+a controller. The gauge markers are visual objects; they do not measure a
+deforming material surface.
+
+The model excludes measured axial extension, shear strain, torsional strain,
+constitutive behavior, finite-strain calibration, resistance change, gauge
+factor, bridge circuits, noise, thermal drift, hysteresis, gauge bonding, and
+sensor latency. Equation~\eqref{eq:strain} is an idealized kinematic emulation,
+not an experimentally validated strain field. A material law is not inferred
+from the drive stiffness. Use the term \emph{orientation-derived virtual
+bending strain} in research reporting.
+
+\section{Sensor-driven reconstruction and RViz}
+Each ring supplies three strain values. Inverting Equation~\eqref{eq:strain}
+uses the matrix
+\begin{equation}
+\mathbf{A}=r\begin{bmatrix}
+-\sin\alpha_1&\cos\alpha_1\\
+-\sin\alpha_2&\cos\alpha_2\\
+-\sin\alpha_3&\cos\alpha_3
+\end{bmatrix},\qquad
+\hat{\boldsymbol{\kappa}}=\underset{\boldsymbol{\kappa}}{\arg\min}
+\|\mathbf{A}\boldsymbol{\kappa}-\boldsymbol{\varepsilon}\|_2^2.
+\end{equation}
+Published microstrain is converted back to dimensionless strain first.
+The three readings estimate two bending components; a single ring is not a
+six-degree-of-freedom pose sensor. Axial stretch or torsion is not estimated.
+
+The two recovered curvature vectors are interpolated componentwise at interval
+midpoints. NumPy interpolation uses the nearest endpoint value outside the
+two ring locations. Each interval is assigned
+\begin{equation}
+\beta_i=d\|\hat{\boldsymbol{\kappa}}_i\|,
+\qquad\theta_i=\operatorname{atan2}(-\hat\kappa_{x,i},\hat\kappa_{y,i}).
+\end{equation}
+The generated six-disc URDF contains fifteen movable visualization joints:
+three per interval as in Equation~\eqref{eq:urdf}. The reconstructed joint states
+are published to \texttt{/joint\_states}; robot-state publisher converts them
+to TF using the supplied robot description. A static transform connects
+\texttt{map} to \texttt{soft\_limb\_disk\_00}.
+
+The RViz limb receives sensor-derived joint states, not the leader controller's
+commands. Nevertheless, since its inputs are generated from leader poses
+through the same strain equation used for inversion, reconstruction agreement
+is partly an internal consistency test. It is not independent validation of
+the strain model. Only two rings are available; localized bends outside or
+between those rings cannot generally be recovered uniquely.
+
+\section{ROS interface and plotting}
+\begin{longtable}{p{0.29\linewidth}p{0.64\linewidth}}
+\toprule
+Stream & Purpose and units\\\midrule
+\endhead
+Joint \texttt{roll/position} & Local bend target in degrees; base and pairs
+01--04 A/B. Identified legacy targets are converted by the adapter.\\
+Joint \texttt{yaw/position} & Bending-plane direction in degrees, wrapped
+around the circumference.\\
+Joint \texttt{roll/torque} & Scalar direct bending effort, labeled N\,m.\\
+\texttt{measured\_tip/phi} & Norm of relative tip rotation-vector X/Y components,
+converted to degrees.\\
+\texttt{measured\_tip/theta} & Direction from those components in degrees.\\
+\texttt{measured\_tip/orientation} & Relative tip quaternion $[w,x,y,z]$.\\
+Ring \texttt{strain} & Three-element \texttt{Float64MultiArray}, microstrain.\\
+Ring \texttt{gauge\_1..3/strain} & Individual scalar microstrain channels.\\
+Ring \texttt{orientation, phi, theta} & Ring pose relative to the base;
+quaternion and derived angles.\\
+\texttt{/robot\_description} & Generated URDF for robot-state publisher/RViz.\\
+\texttt{/joint\_states}, \texttt{/tf} & Reconstructed kinematic joint states
+and visualization transforms.\\
+\bottomrule
+\end{longtable}
+The joint topic prefix is \texttt{/soft\_limb/pair\_XX/...}; ring topics use
+\texttt{/soft\_limb/sensors/<station>/...}; measured-tip topics use
+\texttt{/soft\_limb/measured\_tip/...}.
+
+The live Matplotlib plotter subscribes to all six individual strain channels,
+with two rows of three plots, a rolling 20~s history, and a 20~Hz refresh limit.
+The horizontal axis uses local monotonic wall time, not a synchronized
+simulation timestamp. Plot histories are not automatically exported as a
+research dataset. Timestamp alignment, recording, and replay need to be added
+or managed through a documented logging workflow.
+
+\section{Recorded preliminary verification}\label{sec:validation}
+\subsection{Method and metrics}
+The headless harness opens the hanging six-disc asset, validates topology,
+applies the working drive/solver configuration, and receives commands through
+the actual ROS position controller. Its default run is 12~s of simulated
+time at 240~Hz (2880 physics steps); it measures the last simulated second.
+It does not start the complete RViz/plotter launch. Thus it is an end-to-end
+command-to-physics test, not a full graphical-launch validation.
+
+The target tip quaternion is constructed from axis
+$\mathbf{a}(\Theta)$ and angle $\Phi_c$. Full orientation error is
+\begin{equation}
+e_R=\left\|\operatorname{rotvec}(q_{\mathrm{target}}^{-1}
+q_{\mathrm{tip}})\right\|,
+\end{equation}
+reported in degrees. Reported phi is the norm of the relative tip
+rotation-vector's X/Y components. This metric is not a signed accumulated
+arc angle and uses a shortest-path orientation representation; bends beyond
+180\degrees{} cannot be interpreted as an unwrapped total angle from it.
+
+Harness tolerances are 2\degrees{} full orientation error and a 1\degrees{}
+peak-to-peak phi range during the final second. These are software-test
+tolerances, not calibrated measurement uncertainty. Isaac fast shutdown can
+obscure a raised exception in the process exit status; inspect the explicit
+\texttt{VERIFY RESULT: PASS/FAIL} and retain the output rather than relying
+on exit status alone.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{p{0.33\linewidth}lll}
+\toprule
+Case & Final phi & Full tip error & Status\\\midrule
+Working controller, 180\degrees{}, theta=0 & 179.9996\degrees{} & 0.0004\degrees{} & PASS\\
+Legacy controller with adapter, same target & 179.9996\degrees{} & 0.0004\degrees{} & PASS\\
+Large diagonal, 180\degrees{}, theta=45\degrees{} & About 178.93\degrees{} & About 10.25\degrees{} & Limitation\\
+User observation before compatibility fix & 81.8181568\degrees{} & Not recorded & Mismatch\\
+\bottomrule
+\end{tabular}
+\caption{Individual recorded results. The diagonal result is retained from
+the prior working drive-map test and README, not a new diagonal trial of the
+latest compatibility adapter. No repeated-trial statistics are claimed.}
+\end{table}
+
+The successful tests printed a final-second range of
+179.9996--179.9996\degrees{} at four decimal places. This establishes no
+visible variation at the reported precision under those conditions, not
+mathematically zero oscillation. Adjacent-disc orientation increments were
+approximately 36\degrees{} in the single-axis test. Matching orientation
+increments does not by itself validate disc-center geometry, payload
+robustness, hardware behavior, or all-direction performance.
+
+Six offline adapter regressions passed: legacy scaling, working no-double-scale,
+manual publisher preservation, incomplete graph detection, duplicate controller
+ambiguity, and the local Humble message-only callback. A real ROS test using
+the original publisher also confirmed base 36\degrees{} and an algebraic
+total of 180\degrees{} across nine active drives. The ROS package rebuilt
+successfully after the correction.
+
+\section{Known limitations and rejected approaches}
+\begin{enumerate}
+\item Equation~\eqref{eq:drive} produces a substantial full-orientation error
+at the recorded large diagonal bend. Exact all-direction constant-curvature
+tracking is not established, despite successful single-axis tracking.
+\item An attempted runtime rotation of both D6 reference frames invalidated
+physics handles in the test and was removed. That strategy is not active.
+\item Several earlier corrections and disc-count changes were explicitly
+rolled back. Their intended benefits must not be treated as retained results.
+\item Equal final orientation increments do not prove continuous fixed-length
+curvature, and local slew limits may produce nonuniform transition shapes.
+\item Gravity-compensated holding does not establish loaded or unassisted
+holding performance. Contact, disturbance, and mass uncertainty need testing.
+\item Strain estimation and reconstruction share an idealized equation;
+neither has been validated against real gauges or an independent material model.
+\item ROS graph-based conversion depends on publisher identity and discovery.
+Stale/duplicate controllers and nonstandard remappings remain operational risks.
+\item Two sensor rings cannot uniquely recover arbitrary distributed curvature,
+torsion, axial stretch, or full shape without additional assumptions.
+\item The quadruped, hybrid control, and two-physical-limb backup have not been
+validated by the latest single-limb position regression.
+\end{enumerate}
+
+\section{Reproducible operation and asset handling}
+\subsection{Environment}
+The working environment uses Ubuntu 22.04, ROS~2 Humble, Isaac Sim~4.5.0,
+an NVIDIA GPU/driver, colcon, RViz2, robot-state publisher, TF2, and Python
+Matplotlib/Tk. One successful diagnostic environment reported an RTX~3080 and
+driver 580.178.04; this is a test environment, not a universal prerequisite.
+For each recorded experiment retain exact versions, USD hashes, timestep,
+solver settings, drive values, and whether gravity compensation was enabled.
+
+Paths below are portable examples. Replace the ROS setup path for a
+source-built installation and set the actual Isaac installation location.
+Run from the extracted repository root named \texttt{soft\_world}.
+\begin{lstlisting}
+cd /path/to/soft_world
+source /opt/ros/humble/setup.bash
+export ISAAC_SIM_PATH=/path/to/isaacsim
+colcon build --packages-select soft_world
+source install/setup.bash
+ros2 launch soft_world soft_world_working.launch.py
+\end{lstlisting}
+In a separate terminal, source the same ROS and workspace setup, then run
+\begin{lstlisting}
+cd /path/to/soft_world
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 scripts/control_soft_limb_working.py --ros-args \
+  -p phi_position:=180.0 -p theta_position:=0.0
+ros2 topic echo /soft_limb/measured_tip/phi --once
+\end{lstlisting}
+The echo is run in another terminal while the controller is active. Default
+working position parameters are phi=90\degrees{} and theta=0\degrees{};
+explicit experimental parameters are preferable.
+
+To verify independently from the graphical launch, stop other controllers,
+source the environment, and run
+\begin{lstlisting}
+python3 scripts/test_position_topology_working.py
+"$ISAAC_SIM_PATH/python.sh" scripts/verify_bend_working.py \
+  --phi 180 --theta 0
+"$ISAAC_SIM_PATH/python.sh" scripts/verify_bend_working.py \
+  --phi 180 --theta 0 --legacy-controller
+\end{lstlisting}
+Retain stdout/stderr and the explicit verification status. Run simulations
+sequentially to avoid resource contention. These commands require functioning
+GPU access and permission to write runtime ROS/Isaac logs.
+
+\subsection{RViz and safe operation}
+Use fixed frame \texttt{map}, add RobotModel, choose description source Topic,
+and set description topic \texttt{/robot\_description}. The working launch
+publishes the map-to-base transform. Its RViz/plotter processes remove selected
+Snap-injected GTK/GIO paths to avoid the observed host-library ABI conflict;
+this workaround is environment-specific.
+
+Start only one controller after the simulation loads. Stop the controller
+before stopping the launch. A forced VS Code exit may leave controllers alive;
+inspect nodes and process identity before terminating a confirmed stale
+process. Restart the simulator after loader changes; a running Python process
+does not automatically reload an edited installed script.
+
+\subsection{USD generation, portability, and version control}
+The active launch loads \path{usd/soft_limb_hanging_6_disc_working.usd} directly.
+It does not prune a twelve-disc scene at runtime. A matching six-disc position
+asset is retained separately from older twelve-disc assets.
+Native generators are invoked by
+\path{scripts/create_six_disc_assets_working.py}; they require Isaac's
+initialized schema/runtime environment. The authored geometry updater preserves
+existing native metadata rather than rebuilding a flattened asset without
+that environment. Asset references must be inspected when distributing to
+another machine; portable Python paths do not alone establish portable USD
+references.
+
+For ZIP sharing, retain source, launch files, package metadata, USD assets,
+README, and this research documentation; omit generated \texttt{build/},
+\texttt{install/}, \texttt{log/}, and caches. Rebuild at the recipient's location.
+\texttt{.gitignore} only governs untracked files in Git; it does not delete
+files, untrack committed assets, or filter a manually created ZIP. Preserve
+the working-file policy and avoid replacing historical backups.
+
+\section{Recommended next research experiments}
+These are proposed tests, not completed results.
+\begin{enumerate}
+\item Run repeated position trials across phi, theta, and both bend signs.
+Report quaternion error, signed interval angles where definable, final phi
+range, overshoot, settling time, and run-to-run variation.
+\item Compare measured disc centers and orientations with a fitted circle
+and the continuous fixed-length reference. Report radial-line intersection
+residuals and distinguish hinge geometry from true continuous-arc geometry.
+\item Sweep damping, drive gains, solver iterations, timestep, gravity
+compensation, and applied load separately. Control these variables rather
+than attributing all angle errors to stiffness.
+\item Test localized manual perturbations and known nonuniform curvature.
+Compare sensor-driven reconstruction against independent pose ground truth,
+especially outside the sensor rings.
+\item Validate virtual strain against a separate deformable model or hardware
+gauges, including sensor radius, sign, axial extension, finite-strain behavior,
+gauge factor, noise, calibration, and temperature sensitivity as appropriate.
+\item Introduce synchronized simulation timestamps, durable datasets, and
+experiment manifests. Preserve raw data and analysis code, not only screenshots
+or rolling plot displays.
+\item Validate hybrid effort equilibrium and torque distribution separately;
+only then consider hardware transfer or quadruped integration.
+\end{enumerate}
+Potential research questions include whether six-disc reconstruction error
+remains acceptable relative to a twelve-disc reference, how sparse gauge rings
+limit shape observability, and whether geometry-aware actuation can reduce the
+large-angle diagonal error without sacrificing stable compliant motion.
+
+\section{Conclusion}
+The working platform now supports a six-disc hanging leader, separate position
+and preliminary hybrid interfaces, six pose-derived strain channels, live
+graphs, and sensor-driven RViz reconstruction. The confirmed eleven-versus-five
+normalization failure was corrected in the loader and reproduced in a
+successful legacy-controller regression. The reported 179.9996\degrees{}
+single-axis result is a specific software verification result. Physical
+strain validity, exact inextensible constant-curvature geometry, arbitrary
+bending-direction accuracy, and hardware applicability remain open research
+tasks rather than established conclusions.
+
+\begin{thebibliography}{9}
+\bibitem{webster2010}
+R.~J. Webster III and B.~A. Jones,
+``Design and kinematic modeling of constant curvature continuum robots:
+A review,'' \emph{The International Journal of Robotics Research},
+vol.~29, no.~13, pp.~1661--1683, 2010.
+\href{https://doi.org/10.1177/0278364910368147}{doi:10.1177/0278364910368147}.
+\bibitem{implementation}
+SoftWorld working repository: README, working Python implementation, and
+six-disc USD assets. Inspected September~15, 2026; working snapshot extends
+the base revision recorded in Section~2.
+\bibitem{records}
+SoftWorld development conversation and headless/ROS verification output,
+September~15, 2026. Numerical excerpts retained in this document and
+\path{validation_record_working.txt}; not an independently published dataset.
+\end{thebibliography}
+
+\appendix
+\section{Active file map}
+\begin{longtable}{p{0.53\linewidth}p{0.40\linewidth}}
+\toprule
+Repository-relative file & Role\\\midrule
+\endhead
+\path{launch/soft_world_working.launch.py} & Simulator, RViz, TF, description,
+and plots.\\
+\path{scripts/load_soft_limb_working.py} & Physics configuration, command
+consumption, sensing, torque application, and reconstruction.\\
+\path{scripts/control_soft_limb_working.py} & Five-interval position command.\\
+\path{scripts/control_soft_limb_hybrid_working.py} & Preliminary hybrid effort
+and direction command.\\
+\path{soft_world/limb_configuration_working.py} & Shared six-disc topology,
+tip index, bend normalization, and stage validation.\\
+\path{scripts/limb_configuration_working.py} & Import bridge that avoids the
+legacy \texttt{scripts/soft\_world.py} package-name collision.\\
+\path{scripts/position_topology_adapter_working.py} & Identified legacy position
+conversion.\\
+\path{scripts/test_position_topology_working.py} & Six offline adapter regressions.\\
+\path{scripts/verify_bend_working.py} & ROS-to-physics headless verification.\\
+\path{scripts/plot_strain_gauges_working.py} & Six live plots.\\
+\path{soft_world/robot_description_working.py} & Six-disc, fifteen-joint RViz URDF.\\
+\path{scripts/soft_limb_hang_working.py} & Hanging USD generator.\\
+\path{scripts/soft_limb_working.py} & Position asset generator.\\
+\path{scripts/create_six_disc_assets_working.py} & Native generator wrapper.\\
+\path{scripts/update_six_disc_geometry_working.py} & Native authored geometry
+update.\\
+\path{usd/soft_limb_hanging_6_disc_working.usd} & Active hanging asset.\\
+\path{usd/soft_limb_position_control_6_disc_working.usd} & Position asset.\\
+\path{scripts/load_soft_limb_in_simulation_working.py} & Older two-limb backup.\\
+\path{launch/soft_world_in_simulation_working.launch.py} & Backup launch.\\
+\bottomrule
+\end{longtable}
+
+\section{Retained numerical excerpts}\label{app:results}
+Working-controller test:
+\begin{lstlisting}
+VERIFY controller: base=36.0 deg,
+split joints=[18.0, 18.0, 18.0, 18.0] deg;
+tip=/World/SoftLimb/Disk_05
+tip_orientation_error=0.0004 deg
+last_second_phi_range=179.9996..179.9996 deg
+intervals=[35.999966601826934, 35.99982317874544,
+35.999893167570946, 35.999921731340976, 35.999989327436786]
+VERIFY RESULT: PASS
+\end{lstlisting}
+Original twelve-disc controller with the working loader's adapter:
+\begin{lstlisting}
+Detected legacy 12-disc position controller:
+rescaling bend targets by 11/5.
+180 degrees now refers to the sixth/final disc Disk_05.
+VERIFY controller: base=36.0 deg,
+split joints=[18.0, 18.0, 18.0, 18.0] deg;
+tip=/World/SoftLimb/Disk_05
+tip_orientation_error=0.0004 deg
+last_second_phi_range=179.9996..179.9996 deg
+VERIFY RESULT: PASS
+\end{lstlisting}
+Separate ROS command verification:
+\begin{lstlisting}
+PASS actual ROS legacy controller:
+base=36.000000, total=180.000000
+\end{lstlisting}
+The A and B arrays were both checked in the harness; the printed split array
+above displays A only. Rounded equality of output fields is not a substitute
+for a time-series dataset or uncertainty analysis.
+
+\section{Suggested experiment-record template}
+\begin{lstlisting}
+Experiment ID / researcher / date:
+Research question and hypothesis:
+Git revision and uncommitted changes:
+USD asset names, SHA-256 hashes, reference portability:
+OS / ROS / Isaac / Python / GPU / driver versions:
+Disc count, pitch, radius, masses:
+Drive mode, stiffness, damping, body damping:
+Timestep, solver iterations, gravity compensation:
+Controller identity and parameters:
+Loads, contact conditions, manual disturbances:
+Simulation duration and timestamp convention:
+Raw logs / rosbag / analysis script locations:
+Metrics, tolerances, repeated-trial count:
+Results, uncertainty, limitations, and disposition:
+\end{lstlisting}
+Record any generative-AI assistance in accordance with the researcher's
+program and publication requirements. The researcher should review derivations,
+citations, source changes, and claimed evidence before academic submission.
+
+\end{document}

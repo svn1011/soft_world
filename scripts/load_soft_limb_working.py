@@ -22,9 +22,12 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64, Float64MultiArray
+from limb_configuration_working import (
+    JOINT_COUNT, TIP_DISK_INDEX, DISK_PATHS, validate_stage,
+)
+from position_topology_adapter_working import PositionTopologyAdapter
 
 
-JOINT_COUNT = 5
 MAX_ABS_BEND_POSITION_DEGREES = 40.0
 MAX_TARGET_SPEED_DEGREES_PER_SECOND = 20.0
 MAX_ABS_TORQUE = 1_000_000.0
@@ -223,6 +226,7 @@ class SoftLimbCommandSubscriber(Node):
 
     def __init__(self, stage):
         super().__init__("soft_limb_command_subscriber")
+        self._position_topology = PositionTopologyAdapter(self, JOINT_COUNT)
         # Columns are bend magnitude and bend direction in degrees.
         self.base_command = np.zeros(2, dtype=np.float32)
         self.base_applied = np.zeros(2, dtype=np.float32)
@@ -325,13 +329,16 @@ class SoftLimbCommandSubscriber(Node):
         self._drive_targets.append(
             (command, applied, x_target, y_target)
         )
+        position_topic = f"{topic_root}/roll/position"
+
+        def receive_position(message):
+            factor = self._position_topology.scale(position_topic)
+            self._set_roll_position(command, torque_command, message, factor)
+
         self.create_subscription(
             Float64,
-            f"{topic_root}/roll/position",
-            lambda message, values=command, torque=torque_command:
-                self._set_roll_position(
-                    values, torque, message
-                ),
+            position_topic,
+            receive_position,
             10,
         )
         self.create_subscription(
@@ -353,9 +360,9 @@ class SoftLimbCommandSubscriber(Node):
         )
 
     @staticmethod
-    def _set_roll_position(command, torque_command, message):
+    def _set_roll_position(command, torque_command, message, topology_scale=1.0):
         command[0] = np.clip(
-            message.data,
+            message.data * topology_scale,
             -MAX_ABS_BEND_POSITION_DEGREES,
             MAX_ABS_BEND_POSITION_DEGREES,
         )
@@ -422,7 +429,7 @@ class SoftLimbCommandSubscriber(Node):
         base_orientation = disk_orientations[0]
 
         tip_orientation = relative_quaternion(
-            base_orientation, disk_orientations[-1]
+            base_orientation, disk_orientations[TIP_DISK_INDEX]
         )
         tip_rotation = quaternion_rotation_vector(tip_orientation)
         tip_x, tip_y = tip_rotation[:2]
@@ -676,6 +683,10 @@ def main():
     if not open_stage(usd_path):
         raise RuntimeError(f"Isaac Sim could not open {usd_path}")
 
+    from omni.usd import get_context
+    validate_stage(get_context().get_stage())
+    print(f"SIX-DISC working limb: {JOINT_COUNT} bend intervals; tip {DISK_PATHS[-1]}")
+
     # Attach the World API to the physics scene already stored in the USD.
     world = World(
         stage_units_in_meters=1.0,
@@ -694,7 +705,7 @@ def main():
     disks = world.scene.add(
         RigidPrim(
             # Do not include the visual sensor children in the rigid view.
-            prim_paths_expr="/World/SoftLimb/Disk_[0-9][0-9]",
+            prim_paths_expr=list(DISK_PATHS),
             name="soft_limb_disks",
             reset_xform_properties=False,
         )

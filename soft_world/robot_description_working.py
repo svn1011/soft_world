@@ -1,9 +1,9 @@
 """Generate the RViz description for the sensor-reconstructed soft limb."""
 
 import math
+from .limb_configuration_working import DISK_COUNT
 
 
-DISK_COUNT = 6
 DISK_PITCH = 0.025
 DISK_RADIUS = 0.02
 DISK_THICKNESS = 0.005

@@ -1,0 +1,54 @@
+SoftWorld retained validation excerpts
+Documentation snapshot: 2026-09-15
+These are excerpts from available earlier test logs, not new trials.
+Base repository revision: e3e976c97e63596887ccb22e03ad33523c25db72
+Additional working-tree modifications are part of this snapshot.
+
+USER OBSERVATION BEFORE LEGACY ADAPTER
+Requested phi: 180 degrees
+Reported /soft_limb/measured_tip/phi: 81.81815680578234 degrees
+Expected mismatch: 180 * 5/11 = 81.81818181818181 degrees
+
+WORKING CONTROLLER, SIX-DISC LEADER
+Source log basename: soft_limb_six_disc_controller_final_working.log
+Command: scripts/verify_bend_working.py --phi 180 --theta 0
+VERIFY controller: base=36.0 deg, split joints=[18.0, 18.0, 18.0, 18.0] deg;
+tip=/World/SoftLimb/Disk_05
+tip_orientation_error=0.0004 deg
+last_second_phi_range=179.9996..179.9996 deg
+intervals=[35.999966601826934, 35.99982317874544, 35.999893167570946,
+35.999921731340976, 35.999989327436786]
+VERIFY RESULT: PASS
+
+ORIGINAL TWELVE-DISC CONTROLLER WITH SIX-DISC LOADER ADAPTER
+Source log basename: soft_limb_legacy_adapter_retry_working.log
+Command: scripts/verify_bend_working.py --phi 180 --theta 0 --legacy-controller
+Detected legacy 12-disc position controller: rescaling bend targets by 11/5.
+VERIFY controller: base=36.0 deg, split joints=[18.0, 18.0, 18.0, 18.0] deg;
+tip=/World/SoftLimb/Disk_05
+tip_orientation_error=0.0004 deg
+last_second_phi_range=179.9996..179.9996 deg
+VERIFY RESULT: PASS
+
+REAL ROS COMMAND TEST
+PASS actual ROS legacy controller: base=36.000000, total=180.000000
+
+PRIOR LARGE-DIAGONAL TEST: RETAINED LIMITATION
+Target: phi=180 degrees, theta=45 degrees
+Measured phi approximately 178.93 degrees
+Full tip orientation error approximately 10.25 degrees
+This is an earlier drive-mapping result retained in the README, not a new
+diagonal validation of the latest adapter.
+
+OFFLINE REGRESSIONS
+scripts/test_position_topology_working.py: 6 tests passed
+Cases: legacy scaling, working no-double-scale, manual unchanged, incomplete
+discovery, duplicate controllers, Humble message-only callback.
+
+QUALIFICATIONS
+Headless harness default: 12 simulated seconds at 240 Hz, final second sampled.
+Position-mode gravity compensation enabled; no payload trial claimed.
+Rounded constant phi is not proof of mathematically zero oscillation.
+Only A split array is printed; both A/B arrays are checked before simulation.
+No physical strain calibration, statistical confidence interval, or complete
+graphical-launch validation is established by these excerpts.

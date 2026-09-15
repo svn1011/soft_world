@@ -172,6 +172,39 @@ renders that final disc gray; this color difference is not a tracking error.
 
 ## Position control
 
+For the six-disc limb, use **`control_soft_limb_working.py`**, not
+`control_soft_limb.py`. The original controller is a preserved twelve-disc
+backup: it divides phi by 11 and previously produced only about 81.8° on five
+intervals for a 180° request. The working controller divides by 5: base 36°,
+then four serial A/B pairs at 18° per joint. The final (sixth) disc is
+`Disk_05`, because numbering starts at zero. Stop old controllers before
+starting the working controller; do not run both together.
+
+The working loader now also recognizes the original position controller's
+complete twelve-disc publisher topology and converts its joint bend targets
+by 11/5 before applying the six-disc limits. A warning reports this conversion.
+It does not rescale the six-disc working controller, manual joint commands,
+or hybrid torque. If duplicate controllers share the same node name, conversion
+is ambiguous: stop the duplicates rather than relying on automatic conversion.
+After changing loader code, rebuild with `colcon build --packages-select soft_world`,
+source `install/setup.bash` in both terminals, and restart the simulator.
+
+From the extracted repository root, after rebuilding and sourcing the install:
+
+```bash
+ros2 launch soft_world soft_world_working.launch.py
+```
+
+In another sourced terminal, from that same repository root:
+
+```bash
+python3 scripts/control_soft_limb_working.py --ros-args \
+  -p phi_position:=180.0 -p theta_position:=0.0
+```
+
+The working loader rejects assets that do not contain exactly six discs,
+and uses an explicitly ordered six-disc view and explicit `Disk_05` tip.
+
 In a second terminal:
 
 ```bash
