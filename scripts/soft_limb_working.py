@@ -16,9 +16,10 @@ from pxr import Gf, PhysxSchema, Sdf, UsdGeom, UsdPhysics, UsdShade
 import numpy as np
 
 
-DISK_COUNT = 12
+DISK_COUNT = 6
 DISK_THICKNESS = 0.005  # 0.5 cm
-DISK_GAP = 0.02  # 2 cm clear space between disk faces
+# Five 55 mm intervals preserve the old 11 x 25 mm centerline length.
+DISK_GAP = 0.05  # 5 cm clear space between disk faces
 DISK_PITCH = DISK_THICKNESS + DISK_GAP
 START_HEIGHT = 0.03
 

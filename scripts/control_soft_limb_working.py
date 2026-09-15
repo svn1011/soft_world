@@ -7,12 +7,12 @@ from rclpy.node import Node
 from std_msgs.msg import Float64
 
 
-JOINT_COUNT = 11
+JOINT_COUNT = 5
 PUBLISH_RATE_HZ = 20.0
 PHI_POSITION_DEGREES = 0.0
 THETA_POSITION_DEGREES = 0.0
 
-
+j
 class SoftLimbPositionPublisher(Node):
     """Publish phi bend magnitude and theta direction."""
 
