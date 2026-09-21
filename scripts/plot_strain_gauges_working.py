@@ -3,6 +3,7 @@
 """Display six live strain-gauge histories from the working soft limb."""
 
 from collections import deque
+import os
 import time
 
 import matplotlib
@@ -19,6 +20,11 @@ from std_msgs.msg import Float64
 HISTORY_SECONDS = 20.0
 MAX_SAMPLES = 4000
 PLOT_REFRESH_HZ = 20.0
+PLOT_SIGNAL = os.environ.get("SOFT_LIMB_PLOT_SIGNAL", "strain")
+SIGNAL_LABELS = {
+    "strain": ("Strain (µε)", "Soft Limb Strain Gauges"),
+    "bridge_voltage": ("Bridge output (V)", "Soft Limb Bridge Voltages"),
+}
 GAUGES = (
     ("one_third", 1, "One-third: gauge 1 (0°)", "tab:red"),
     ("one_third", 2, "One-third: gauge 2 (120°)", "tab:green"),
@@ -30,10 +36,12 @@ GAUGES = (
 
 
 class StrainGaugePlotter(Node):
-    """Collect the six individual microstrain topics for live plotting."""
+    """Collect one selected six-channel virtual-sensor signal for plotting."""
 
     def __init__(self):
-        super().__init__("soft_limb_strain_plotter")
+        if PLOT_SIGNAL not in SIGNAL_LABELS:
+            raise ValueError(f"Unsupported plot signal: {PLOT_SIGNAL}")
+        super().__init__(f"soft_limb_{PLOT_SIGNAL}_plotter")
         self.start_time = time.monotonic()
         self.samples = {
             (station, gauge): (
@@ -44,7 +52,7 @@ class StrainGaugePlotter(Node):
 
         for station, gauge, _, _ in GAUGES:
             topic = (
-                f"/soft_limb/sensors/{station}/gauge_{gauge}/strain"
+                f"/soft_limb/sensors/{station}/gauge_{gauge}/{PLOT_SIGNAL}"
             )
             self.create_subscription(
                 Float64,
@@ -54,7 +62,7 @@ class StrainGaugePlotter(Node):
                 ),
                 10,
             )
-        self.get_logger().info("Plotting all six strain gauges")
+        self.get_logger().info(f"Plotting all six {PLOT_SIGNAL} channels")
 
     def record(self, key, message):
         """Append one time-stamped strain sample."""
@@ -68,8 +76,9 @@ def main(args=None):
     node = StrainGaugePlotter()
 
     figure, axes = plt.subplots(2, 3, figsize=(14, 7), sharex=True)
-    figure.canvas.manager.set_window_title("Soft Limb Strain Gauges")
-    figure.suptitle("Live strain-gauge readings")
+    axis_label, window_title = SIGNAL_LABELS[PLOT_SIGNAL]
+    figure.canvas.manager.set_window_title(window_title)
+    figure.suptitle(window_title)
     lines = {}
 
     for axis, (station, gauge, title, color) in zip(axes.flat, GAUGES):
@@ -77,7 +86,7 @@ def main(args=None):
         lines[(station, gauge)] = line
         axis.set_title(title)
         axis.set_xlabel("Time (s)")
-        axis.set_ylabel("Strain (µε)")
+        axis.set_ylabel(axis_label)
         axis.grid(True, alpha=0.3)
         axis.set_xlim(0.0, HISTORY_SECONDS)
         axis.set_ylim(-1.0, 1.0)

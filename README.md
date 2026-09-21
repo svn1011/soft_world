@@ -327,18 +327,28 @@ to position control, torque control, gravity/contact, and manual manipulation.
 /soft_limb/sensors/<station>/gauge_1/strain
 /soft_limb/sensors/<station>/gauge_2/strain
 /soft_limb/sensors/<station>/gauge_3/strain
+/soft_limb/sensors/<station>/bridge_voltage
+/soft_limb/sensors/<station>/bridge_valid
+/soft_limb/sensors/<station>/gauge_1/bridge_voltage
+/soft_limb/sensors/<station>/gauge_1/bridge_valid
 ```
 
 - `strain`: three-element `Float64MultiArray` in microstrain.
 - `orientation`: relative quaternion `[w, x, y, z]` from the base.
 - `phi`: measured bend magnitude in degrees.
 - `theta`: measured bend direction in degrees.
+- `bridge_voltage`: three ideal quarter-bridge outputs in volts.
+- `bridge_valid`: three values, where `1.0` is within the configured foil-gauge
+  and DAQ range and `0.0` is outside it. Individual gauge validity is also
+  available as a `Bool` topic.
 
 Inspect the streams with:
 
 ```bash
 ros2 topic echo /soft_limb/sensors/one_third/strain
 ros2 topic echo /soft_limb/sensors/two_thirds/orientation
+ros2 topic echo /soft_limb/sensors/one_third/bridge_voltage
+ros2 topic echo /soft_limb/sensors/one_third/bridge_valid
 ros2 topic echo /joint_states --once
 ros2 topic echo /robot_description --once
 ros2 topic echo /tf --once
@@ -363,6 +373,31 @@ python3 scripts/plot_strain_gauges_working.py
 The microstrain is a kinematic emulation derived from live disc poses and the
 assumed 20 mm gauge radius. It is suitable for reconstruction and controller
 testing, but is not a calibrated prediction for a particular physical gauge,
+material, or adhesive system.
+
+### Virtual Wheatstone-bridge voltage
+
+Each of the six existing virtual gauges now also feeds an ideal independent
+quarter-Wheatstone bridge. The current research assumptions are a 350 ohm foil
+gauge, nominal gauge factor 2.0, and 2.5 V excitation. For the simulated
+surface strain `epsilon`, the output is:
+
+```text
+Vout = -Vexc * (GF * epsilon) / (4 + 2 * GF * epsilon)
+```
+
+The sign depends on which bridge arm the physical gauge occupies; this working
+convention must be retained or changed consistently in hardware and ROS. A
+second six-graph window opens with output volts. It plots the ideal circuit
+value even when the reading is invalid; inspect the `bridge_valid` topic before
+interpreting a value as hardware-feasible.
+
+`bridge_valid=1.0` currently requires both `abs(epsilon) <= 3%` and
+`abs(Vout/Vexc) <= 25 mV/V`. These are deliberately conservative nominal foil
+gauge/DAQ assumptions, not a purchased part's calibration. The current limb's
+high-bend virtual strains can exceed this range, so its voltage output is a
+virtual circuit model until a physical limb material, mounting layer, selected
+gauge, and DAQ are validated.
 adhesive layer, or limb material.
 
 ### RViz reconstruction

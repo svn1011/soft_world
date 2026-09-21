@@ -452,12 +452,41 @@ a controller. The gauge markers are visual objects; they do not measure a
 deforming material surface.
 
 The model excludes measured axial extension, shear strain, torsional strain,
-constitutive behavior, finite-strain calibration, resistance change, gauge
-factor, bridge circuits, noise, thermal drift, hysteresis, gauge bonding, and
-sensor latency. Equation~\eqref{eq:strain} is an idealized kinematic emulation,
-not an experimentally validated strain field. A material law is not inferred
-from the drive stiffness. Use the term \emph{orientation-derived virtual
-bending strain} in research reporting.
+constitutive behavior, finite-strain calibration, noise, thermal drift,
+hysteresis, gauge bonding, and sensor latency. Equation~\eqref{eq:strain} is
+an idealized kinematic emulation, not an experimentally validated strain field.
+A material law is not inferred from the drive stiffness. Use the term
+\emph{orientation-derived virtual bending strain} in research reporting.
+
+\subsection{Virtual Wheatstone-bridge layer}
+The current working implementation additionally converts each of the six
+virtual strain values to an ideal independent quarter-bridge voltage. Its
+explicit research assumptions are nominal resistance $R_0=350~\Omega$, gauge
+factor $GF=2.0$, and excitation $V_{\mathrm{exc}}=2.5$~V. If the active gauge
+occupies the selected bridge arm, its modeled resistance is
+\begin{equation}
+R_g=R_0(1+GF\varepsilon),
+\end{equation}
+and its differential output is
+\begin{equation}
+V_{\mathrm{out}}=-V_{\mathrm{exc}}
+\frac{GF\varepsilon}{4+2GF\varepsilon}.
+\label{eq:bridge}
+\end{equation}
+The sign is a bridge-wiring convention and must be matched to the eventual
+physical connection. Near zero strain, $V_{\mathrm{out}}/V_{\mathrm{exc}}
+\approx-GF\varepsilon/4$; thus 1000~\microstrain{} produces approximately
+$-0.5$~mV/V, or $-1.25$~mV at 2.5~V excitation.
+
+The voltage is published even when it is only a circuit extrapolation, while
+separate validity flags are false when $|\varepsilon|>3\%$ or
+$|V_{\mathrm{out}}/V_{\mathrm{exc}}|>25$~mV/V. A value with false validity
+must not be reported as a feasible physical foil-gauge measurement. At
+compressive strain $\varepsilon\leq-1/GF$, modeled active resistance is
+nonpositive and the voltage is published as NaN. The working model's predicted
+high-bend strains often exceed the 3\% flag. Consequently, this layer provides
+a traceable voltage-interface hypothesis, not a validated selection of a real
+gauge or a demonstration that a foil gauge can survive direct mounting.
 
 \section{Sensor-driven reconstruction and RViz}
 Each ring supplies three strain values. Inverting Equation~\eqref{eq:strain}
@@ -511,6 +540,10 @@ converted to degrees.\\
 \texttt{measured\_tip/orientation} & Relative tip quaternion $[w,x,y,z]$.\\
 Ring \texttt{strain} & Three-element \texttt{Float64MultiArray}, microstrain.\\
 Ring \texttt{gauge\_1..3/strain} & Individual scalar microstrain channels.\\
+Ring \texttt{bridge\_voltage} & Three-element ideal quarter-bridge output in V.\\
+Ring \texttt{bridge\_valid} & Three-element 1.0/0.0 nominal-range flag.\\
+Ring \texttt{gauge\_1..3/bridge\_voltage} & Individual scalar voltage channels.\\
+Ring \texttt{gauge\_1..3/bridge\_valid} & Individual Boolean validity channels.\\
 Ring \texttt{orientation, phi, theta} & Ring pose relative to the base;
 quaternion and derived angles.\\
 \texttt{/robot\_description} & Generated URDF for robot-state publisher/RViz.\\
@@ -522,8 +555,9 @@ The joint topic prefix is \texttt{/soft\_limb/pair\_XX/...}; ring topics use
 \texttt{/soft\_limb/sensors/<station>/...}; measured-tip topics use
 \texttt{/soft\_limb/measured\_tip/...}.
 
-The live Matplotlib plotter subscribes to all six individual strain channels,
-with two rows of three plots, a rolling 20~s history, and a 20~Hz refresh limit.
+The working launch starts two Matplotlib plotters: one subscribes to all six
+individual strain channels and one to all six bridge-voltage channels. Each
+uses two rows of three plots, a rolling 20~s history, and a 20~Hz refresh limit.
 The horizontal axis uses local monotonic wall time, not a synchronized
 simulation timestamp. Plot histories are not automatically exported as a
 research dataset. Timestamp alignment, recording, and replay need to be added
@@ -706,6 +740,10 @@ especially outside the sensor rings.
 \item Validate virtual strain against a separate deformable model or hardware
 gauges, including sensor radius, sign, axial extension, finite-strain behavior,
 gauge factor, noise, calibration, and temperature sensitivity as appropriate.
+\item Select the physical limb material and maximum curvature before purchasing
+foil gauges. A 350~ohm linear foil gauge and a six-channel quarter-bridge DAQ
+are a candidate architecture, but the simulated 25--50\% high-bend surface
+strain is outside ordinary foil-gauge assumptions.
 \item Introduce synchronized simulation timestamps, durable datasets, and
 experiment manifests. Preserve raw data and analysis code, not only screenshots
 or rolling plot displays.
@@ -767,6 +805,9 @@ conversion.\\
 \path{scripts/test_position_topology_working.py} & Six offline adapter regressions.\\
 \path{scripts/verify_bend_working.py} & ROS-to-physics headless verification.\\
 \path{scripts/plot_strain_gauges_working.py} & Six live plots.\\
+\path{scripts/bridge_model_working.py} & Reproducible ideal 350~ohm
+quarter-bridge voltage and validity model.\\
+\path{scripts/test_bridge_model_working.py} & Four offline bridge-model checks.\\
 \path{soft_world/robot_description_working.py} & Six-disc, fifteen-joint RViz URDF.\\
 \path{scripts/soft_limb_hang_working.py} & Hanging USD generator.\\
 \path{scripts/soft_limb_working.py} & Position asset generator.\\

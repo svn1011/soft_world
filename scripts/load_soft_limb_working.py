@@ -21,11 +21,20 @@ from pxr import Gf, PhysxSchema, UsdGeom, UsdPhysics
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from std_msgs.msg import Float64, Float64MultiArray
+from std_msgs.msg import Bool, Float64, Float64MultiArray
 from limb_configuration_working import (
     JOINT_COUNT, TIP_DISK_INDEX, DISK_PATHS, validate_stage,
 )
 from position_topology_adapter_working import PositionTopologyAdapter
+from bridge_model_working import (
+    BRIDGE_EXCITATION_VOLTS,
+    DAQ_INPUT_LIMIT_VOLTS_PER_VOLT,
+    FOIL_GAUGE_STRAIN_LIMIT,
+    GAUGE_FACTOR_NOMINAL,
+    GAUGE_NOMINAL_RESISTANCE_OHMS,
+    bridge_reading_is_within_nominal_range,
+    quarter_bridge_output_voltage,
+)
 
 
 MAX_ABS_BEND_POSITION_DEGREES = 40.0
@@ -273,6 +282,12 @@ class SoftLimbCommandSubscriber(Node):
                 "strain": self.create_publisher(
                     Float64MultiArray, f"{topic_root}/strain", 10
                 ),
+                "bridge_voltage": self.create_publisher(
+                    Float64MultiArray, f"{topic_root}/bridge_voltage", 10
+                ),
+                "bridge_valid": self.create_publisher(
+                    Float64MultiArray, f"{topic_root}/bridge_valid", 10
+                ),
                 "phi": self.create_publisher(
                     Float64, f"{topic_root}/phi", 10
                 ),
@@ -283,6 +298,22 @@ class SoftLimbCommandSubscriber(Node):
                     self.create_publisher(
                         Float64,
                         f"{topic_root}/gauge_{index}/strain",
+                        10,
+                    )
+                    for index in range(1, len(angles) + 1)
+                ],
+                "bridge_voltages": [
+                    self.create_publisher(
+                        Float64,
+                        f"{topic_root}/gauge_{index}/bridge_voltage",
+                        10,
+                    )
+                    for index in range(1, len(angles) + 1)
+                ],
+                "bridge_validity": [
+                    self.create_publisher(
+                        Bool,
+                        f"{topic_root}/gauge_{index}/bridge_valid",
                         10,
                     )
                     for index in range(1, len(angles) + 1)
@@ -470,6 +501,8 @@ class SoftLimbCommandSubscriber(Node):
             curvature_x = local_rotation[0] / (2.0 * DISK_PITCH)
             curvature_y = local_rotation[1] / (2.0 * DISK_PITCH)
             strain_values = []
+            bridge_voltages = []
+            bridge_validity = []
             for angle_degrees in angles:
                 angle = np.deg2rad(angle_degrees)
                 strain = DISK_RADIUS * (
@@ -477,6 +510,13 @@ class SoftLimbCommandSubscriber(Node):
                     - curvature_x * np.sin(angle)
                 )
                 strain_values.append(strain * STRAIN_TO_MICROSTRAIN)
+                bridge_voltage = quarter_bridge_output_voltage(strain)
+                bridge_voltages.append(bridge_voltage)
+                bridge_validity.append(float(
+                    bridge_reading_is_within_nominal_range(
+                        strain, bridge_voltage
+                    )
+                ))
 
             orientation_message = Float64MultiArray()
             orientation_message.data = station_orientation.tolist()
@@ -485,12 +525,25 @@ class SoftLimbCommandSubscriber(Node):
             strain_message = Float64MultiArray()
             strain_message.data = strain_values
             publishers["strain"].publish(strain_message)
+            bridge_voltage_message = Float64MultiArray()
+            bridge_voltage_message.data = bridge_voltages
+            publishers["bridge_voltage"].publish(bridge_voltage_message)
+            bridge_valid_message = Float64MultiArray()
+            bridge_valid_message.data = bridge_validity
+            publishers["bridge_valid"].publish(bridge_valid_message)
             publishers["phi"].publish(Float64(data=float(phi_degrees)))
             publishers["theta"].publish(Float64(data=float(theta_degrees)))
-            for publisher, strain in zip(
-                publishers["gauges"], strain_values
+            for strain_publisher, voltage_publisher, validity_publisher, strain, \
+                    bridge_voltage, bridge_valid in zip(
+                publishers["gauges"], publishers["bridge_voltages"],
+                publishers["bridge_validity"], strain_values, bridge_voltages,
+                bridge_validity
             ):
-                publisher.publish(Float64(data=float(strain)))
+                strain_publisher.publish(Float64(data=float(strain)))
+                voltage_publisher.publish(
+                    Float64(data=float(bridge_voltage))
+                )
+                validity_publisher.publish(Bool(data=bool(bridge_valid)))
 
     @staticmethod
     def _world_bend_directions(orientations, directions_degrees):
@@ -771,6 +824,16 @@ def main():
     print("Position servo    : mass-normalized, overdamped")
     print(f"Bend stiffness    : {BEND_STIFFNESS}")
     print(f"Bend damping      : {BEND_DAMPING}")
+    print(
+        f"Virtual bridge    : {GAUGE_NOMINAL_RESISTANCE_OHMS:.0f} ohm "
+        "quarter bridge, "
+        f"GF={GAUGE_FACTOR_NOMINAL}, Vexc={BRIDGE_EXCITATION_VOLTS} V"
+    )
+    print(
+        "Bridge validity   : foil strain <= "
+        f"{FOIL_GAUGE_STRAIN_LIMIT:.0%}, input <= "
+        f"{DAQ_INPUT_LIMIT_VOLTS_PER_VOLT * 1000:.1f} mV/V"
+    )
     print(f"Physics frequency : {PHYSICS_FREQUENCY_HZ} Hz")
     print(f"Solver pos iters  : {SOLVER_POSITION_ITERATIONS}")
     print(f"Solver vel iters  : {SOLVER_VELOCITY_ITERATIONS}")

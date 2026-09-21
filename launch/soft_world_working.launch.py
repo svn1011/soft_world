@@ -92,6 +92,21 @@ def generate_launch_description():
         ],
         output="screen",
     )
+    bridge_voltage_plots = ExecuteProcess(
+        cmd=[
+            "/usr/bin/env",
+            "-u", "SNAP",
+            "-u", "SNAP_LIBRARY_PATH",
+            "-u", "GTK_PATH",
+            "-u", "GIO_MODULE_DIR",
+            "XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/snapd/desktop",
+            "MPLCONFIGDIR=/tmp/soft_world_matplotlib_voltage",
+            "SOFT_LIMB_PLOT_SIGNAL=bridge_voltage",
+            "python3",
+            strain_plot_path,
+        ],
+        output="screen",
+    )
 
     return LaunchDescription([
         map_to_limb,
@@ -99,4 +114,5 @@ def generate_launch_description():
         isaac_sim,
         rviz,
         strain_plots,
+        bridge_voltage_plots,
     ])
