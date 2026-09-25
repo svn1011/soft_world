@@ -1,5 +1,5 @@
 SoftWorld retained validation excerpts
-Documentation snapshot: 2026-09-15
+Documentation snapshot: 2026-09-21
 These are excerpts from available earlier test logs, not new trials.
 Base repository revision: e3e976c97e63596887ccb22e03ad33523c25db72
 Additional working-tree modifications are part of this snapshot.
@@ -18,6 +18,20 @@ tip_orientation_error=0.0004 deg
 last_second_phi_range=179.9996..179.9996 deg
 intervals=[35.999966601826934, 35.99982317874544, 35.999893167570946,
 35.999921731340976, 35.999989327436786]
+VERIFY RESULT: PASS
+
+INTERMEDIATE TORQUE CLAMP ROS CHECK (SUPERSEDED)
+Date: 2026-09-21
+Requested: 1.0 N*m
+Controller warning reported clipping to the working range.
+Published base torque: 0.05 N*m
+Result: PASS
+
+POSITION REGRESSION AFTER TORQUE CORRECTION
+Date: 2026-09-21
+Command: scripts/verify_bend_working.py --phi 180 --theta 0 --seconds 12
+Tip orientation error: 0.0004 degrees
+Final-second phi: 179.9996..179.9996 degrees
 VERIFY RESULT: PASS
 
 ORIGINAL TWELVE-DISC CONTROLLER WITH SIX-DISC LOADER ADAPTER
@@ -45,9 +59,127 @@ scripts/test_position_topology_working.py: 6 tests passed
 Cases: legacy scaling, working no-double-scale, manual unchanged, incomplete
 discovery, duplicate controllers, Humble message-only callback.
 
+TORQUE-MODE DIAGNOSTIC BEFORE RANGE/PRIORITY CORRECTION
+Date: 2026-09-21
+Harness: scripts/verify_bend_working.py, 8 simulated seconds, theta=0 degrees
+0.001 N*m: final-second phi 3.5555..3.5555 degrees; PASS
+0.002 N*m: final-second phi 7.1150..7.1150 degrees; PASS
+The response doubled with torque. The observed user failure was therefore
+consistent with commands already driving angular stops (the README formerly
+showed 1000 N*m) or a concurrent position publisher cancelling torque.
+
+INTERMEDIATE TORQUE-MODE CORRECTION (SUPERSEDED)
+Working torque range changed from +/-1,000,000 N*m to +/-0.05 N*m.
+Torque slew changed from 2,000,000 N*m/s to 0.10 N*m/s.
+Hybrid controller warns and clips requests outside that working range.
+Nonzero torque now has priority over bend-position callbacks; zero torque
+releases that priority.
+
+INTERMEDIATE POST-CORRECTION TORQUE REGRESSION (SUPERSEDED)
+Date: 2026-09-21
+Command: scripts/verify_bend_working.py --torque 0.002 --theta 0 --seconds 8
+Delivered base and all split-joint torque commands: 0.002 N*m
+Final-second phi: 7.1150..7.1150 degrees
+Adjacent-disc orientation increments (degrees):
+[0.0277971, 1.0071388, 1.5442349, 2.5857698, 1.9500273]
+VERIFY RESULT: PASS
+
+FINAL TORQUE-TO-CURVATURE ADMITTANCE REGRESSION
+Date: 2026-09-21
+The raw body-torque and temporary force-spring implementations were rejected
+because they produced nonuniform curvature dependent on gravity and effective
+joint inertia. The final implementation maps commanded torque to a uniformly
+distributed equilibrium bend: phi = 180 degrees * torque / 0.010 N*m.
+
+Command: scripts/verify_bend_working.py --torque 0.001 --theta 0 --seconds 8
+Final-second phi: 18.0000..18.0000 degrees
+Adjacent-disc orientation increments (degrees):
+[3.5999980, 3.5999778, 3.5999990, 3.5999954, 3.5999953]
+VERIFY RESULT: PASS
+
+Command: scripts/verify_bend_working.py --torque 0.005 --theta 0 --seconds 12
+Expected phi: 90.0000 degrees; tracking error: 0.0001 degrees
+Final-second phi: 89.9999..89.9999 degrees
+Adjacent-disc orientation increments (degrees):
+[18.0000032, 17.9999806, 17.9999476, 17.9999362, 17.9999923]
+VERIFY RESULT: PASS
+
+Command: scripts/verify_bend_working.py --torque 0.010 --theta 0 --seconds 12
+Final-second phi: 179.9996..179.9996 degrees
+Adjacent-disc orientation increments (degrees):
+[35.9999666, 35.9998232, 35.9998932, 35.9999217, 35.9999893]
+VERIFY RESULT: PASS
+
+Interpretation: these verify a software admittance mapping, not raw applied
+body torque, passive material stiffness, or a physical torque-angle curve.
+
+INTERMEDIATE EXTENDED TORQUE RANGE (SUPERSEDED BY DIRECT RUNTIME JOINTS)
+Date: 2026-09-21
+The tip-phi calculation was changed from one shortest-path base-to-tip
+quaternion to the sum of the five local inter-disc bend vectors. This permits
+an accumulated bend greater than 180 degrees to be reported without wrapping.
+X/Y D6 limits were increased from +/-40 to +/-80 degrees.
+
+Diagnostic requests for 270 and 360 degrees exposed a repeatable constraint
+ceiling near 52 degrees in the serial A/B intervals; they reached about 262.3
+and 282.2 degrees and were rejected as working limits. Collision filtering,
+increased drive gains, and asymmetric A/B targets did not remove that ceiling
+and were not retained.
+
+Final command: scripts/verify_bend_working.py --torque 0.0125 --theta 0
+Asset: soft_limb_hanging_6_disc_working.usd
+Expected phi: 225.0000 degrees; tracking error: 0.0001 degrees
+Final-second phi: 224.9999..224.9999 degrees
+Adjacent-disc orientation increments (degrees):
+[44.9999859, 44.9999223, 45.0000234, 44.9999631, 45.0000233]
+VERIFY RESULT: PASS
+
+DIRECT-INTERVAL 270-DEGREE TORQUE REGRESSION
+Date: 2026-09-24
+Cause of the prior ceiling: each later interval used two serial A/B D6
+constraints. Those intervals stopped near 52 degrees even when their targets
+were increased. Collision filtering, increased gains, and asymmetric split
+targets did not remove the constraint and were not retained.
+
+Current runtime correction: before PhysX initialization, the loader deactivates
+the eight authored A/B constraints and creates one direct D6 joint between each
+adjacent disc pair. Existing A/B ROS topics remain compatible: their two
+half-angle vectors are summed into the direct joint's full interval target.
+The unused virtual links remain as kinematic compatibility objects.
+
+Command: scripts/verify_bend_working.py --torque 0.015 --theta 0 --seconds 12
+Asset: soft_limb_hanging_6_disc_working.usd
+Expected phi: 270.0000 degrees; tracking error: 0.0000 degrees
+Final-second phi: 270.0000..270.0000 degrees
+Adjacent-disc orientation increments (degrees):
+[54.0000261, 53.9999657, 53.9999905, 54.0000189, 54.0000326]
+VERIFY RESULT: PASS
+
+DIRECT-INTERVAL REGRESSIONS
+Torque command: 0.001 N*m
+Expected phi: 18.0000 degrees; tracking error: 0.0000 degrees
+Final-second phi: 18.0000..18.0000 degrees
+VERIFY RESULT: PASS
+
+Torque command: 0.005 N*m
+Expected phi: 90.0000 degrees; tracking error: 0.0000 degrees
+Final-second phi: 90.0000..90.0000 degrees
+VERIFY RESULT: PASS
+
+Torque command: 0.010 N*m
+Expected phi: 180.0000 degrees; tracking error: 0.0001 degrees
+Final-second phi: 180.0001..180.0001 degrees
+VERIFY RESULT: PASS
+
+Position command: 180 degrees
+Tip orientation error: 0.0001 degrees
+Final-second phi: 180.0001..180.0001 degrees
+VERIFY RESULT: PASS
+
 QUALIFICATIONS
 Headless harness default: 12 simulated seconds at 240 Hz, final second sampled.
-Position-mode gravity compensation enabled; no payload trial claimed.
+Gravity compensation enabled in position and torque-admittance modes; no
+payload trial claimed.
 Rounded constant phi is not proof of mathematically zero oscillation.
 Only A split array is printed; both A/B arrays are checked before simulation.
 No physical strain calibration, statistical confidence interval, or complete

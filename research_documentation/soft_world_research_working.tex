@@ -16,7 +16,7 @@
   \large Research Development Record --- Working Configuration}
 \author{Author: [Insert researcher name]\\
   MSET graduate student, ETID\\Texas A\&M University}
-\date{Documentation snapshot: September 15, 2026}
+\date{Documentation snapshot: September 24, 2026}
 
 \begin{document}
 \maketitle
@@ -35,9 +35,11 @@ The working loader now converts identified legacy position targets to the
 five-interval configuration. An end-to-end headless test using the original
 controller measured 179.9996\degrees{} at the sixth disc. These results establish
 a bounded software regression result, not physical material validation or
-general constant-curvature accuracy. Large-angle diagonal orientation errors,
-sensor-model assumptions, and unvalidated hybrid behavior remain explicitly
-identified limitations.
+general constant-curvature accuracy. The torque-admittance range was subsequently
+extended and verified at 270.0000\degrees{} using accumulated inter-disc bend
+measurement. Large-angle diagonal orientation errors,
+sensor-model assumptions, and the absence of physical torque calibration
+remain explicitly identified limitations.
 \end{abstract}
 
 \noindent\textbf{Document status.} This is a research-oriented technical record,
@@ -225,8 +227,9 @@ uses negative-Z translations, so position signs must be mapped consistently
 when comparing it with this positive-Z reference convention.
 
 Theta denotes the plane of bending, not an independently commanded physical
-twist. Total phi is base-to-tip orientation change, not the inclination of the
-base-to-tip chord. For an ideal planar 90\degrees{} arc, that chord is inclined
+twist. Total phi is accumulated tangent-orientation change along the disc
+chain, not the inclination of the base-to-tip chord. For an ideal planar
+90\degrees{} arc, that chord is inclined
 approximately 45\degrees{} from the initial tangent.
 
 \subsection{Radial-line intersection criterion}
@@ -262,8 +265,11 @@ R_{\mathrm{hinge}}=\frac{d}{2}\cot(\beta_i/2),\qquad
 \ell_{\mathrm{equivalent}}=\beta_i R_{\mathrm{hinge}},
 \end{equation}
 whereas an inextensible constant-curvature interval would have
-$R_{\mathrm{arc}}=d/\beta_i$ and chord
-$2(d/\beta_i)\sin(\beta_i/2)$. These agree only in the small-angle limit.
+\begin{equation}
+R_{\mathrm{arc}}=d/\beta_i,\qquad
+c_{\mathrm{arc}}=2(d/\beta_i)\sin(\beta_i/2).
+\end{equation}
+These agree only in the small-angle limit.
 Thus, fixed nominal pitch and equal orientation increments alone do not prove
 fixed arc length during bending. The virtual-link offsets and physics leader
 geometry introduce further details requiring separate positional validation.
@@ -278,8 +284,18 @@ For total commanded bend $\Phi_c$, the working controller calculates
 \end{equation}
 For 180\degrees{}, this is 36\degrees{} at the base and 18\degrees{} at each
 split joint. The algebraic sum of all nine scalar bend targets is 180\degrees{}.
-The working controller clamps total requests to $\pm180$\degrees{}; local
-X/Y position limits are $\pm40$\degrees{}.
+These A/B values remain the ROS compatibility representation. Before PhysX
+initialization, the loader deactivates the eight authored serial A/B constraints
+and creates one direct D6 joint between each adjacent disc pair. Both A and B
+half-angle callbacks address that same direct joint; their vectors are summed,
+so the physical runtime target is $\beta$ at every one of the five intervals.
+The unused virtual links are retained as kinematic compatibility objects. The
+two half-angle vectors are summed before writing the shared direct
+drive. This removes the serial-pair high-curvature constraint while preserving
+the existing controller topics.
+The position controller clamps total requests to $\pm180$\degrees{}. Runtime
+X/Y D6 limits are $\pm80$\degrees{} so the torque-admittance mode can exceed
+180\degrees{} without clipping the base interval.
 
 Each drive receives the implementation mapping
 \begin{equation}
@@ -296,29 +312,30 @@ Section~\ref{sec:validation} reports the observed limitation.
 \toprule
 Parameter & Working runtime value\\\midrule
 Drive type & Acceleration (mass-normalized)\\
-Base stiffness / damping & 6400 / 240\\
-Split A/B stiffness / damping & 12800 / 480\\
+All five direct-joint stiffness / damping & 6400 / 240\\
 Linear / angular body damping & 2.0 / 10.0\\
 Physics frequency & 240~Hz\\
 Position / velocity solver iterations & 32 / 8\\
 Controller publishing frequency & 20~Hz\\
-Local target slew limit & 20\degrees{}/s\\
-Torque magnitude limit & $10^6$~N\,m (software bound)\\
-Torque slew limit & $2\times10^6$~N\,m/s (software bound)\\
+Compatibility half-target slew limit & 20\degrees{}/s\\
+Effective direct-interval slew limit & 40\degrees{}/s\\
+Torque magnitude limit & 0.015~N\,m (software bound)\\
+Torque slew limit & 0.020~N\,m/s (software bound)\\
 \bottomrule
 \end{tabular}
 \end{center}
 These are simulator drive settings, not measured Young's modulus, beam
-rigidity, or a calibrated physical damper. The torque bounds are especially
-not hardware-safe operating specifications.
+rigidity, or a calibrated physical damper. The torque bounds are not
+hardware-safe operating specifications. The earlier $10^6$~N\,m software
+bound and 1000~N\,m example were removed because they drove the model directly
+to its angular stops and concealed changes in commanded torque.
 
 In position mode, the loader applies upward forces equal to the configured
 disc and virtual-link weights, using $g=9.81$~m/s$^2$. This explicitly
 compensates gravity; the reported holding test should therefore not be
-described as uncompensated, payload-bearing behavior. Compensation is disabled
-when a nonzero direct phi torque command is active. A zero-torque hybrid
-command consequently does not, by itself, establish a gravity-loaded torque
-mode experiment.
+described as uncompensated, payload-bearing behavior. Compensation is enabled
+in both position and calibrated torque-admittance modes. Consequently, neither
+mode is an uncompensated hanging-load experiment.
 
 Targets are ramped locally rather than corrected instantaneously. Since base
 and split targets have different magnitudes but share the same local slew
@@ -359,19 +376,51 @@ all conflicting ROS commands. Run one controller only. It recognizes the
 specified original topology and controller identity, not arbitrary remapped
 or renamed controllers.
 
-\section{Hybrid control: implemented interface, preliminary status}
-The hybrid script publishes phi as bending torque and theta as bending-plane
-position. The loader converts each scalar torque into an axis in the body's
-current world orientation and applies equal/opposite body torques across the
-corresponding joint. The same requested scalar effort is published to each
-joint; it is not divided as a total bend angle.
+\section{Torque-commanded admittance control: implemented interface}
+The hybrid script publishes a scalar bending-torque command $\tau_c$ and a
+bending-plane direction $\Theta$. The current loader implements a calibrated
+quasi-static admittance law,
+\begin{equation}
+\Phi_{\mathrm{eq}}=180\degrees\frac{\tau_c}{0.010~\mathrm{N\,m}},
+\qquad |\tau_c|\leq0.015~\mathrm{N\,m}.
+\end{equation}
+The resulting equilibrium angle is distributed exactly as in position mode:
+one fifth at each direct disc-to-disc runtime joint. The ROS compatibility
+arrays still carry one tenth on both A and B topics, and the loader vector-sums
+the two halves into the full direct-interval target. The same strong
+acceleration drives then enforce the requested uniform-curvature equilibrium.
+Torque command slew is limited to 0.020~N\,m/s.
 
-Unlike position control, a torque command does not specify or guarantee a
-final angle. Local position targets return toward zero when direct torque is
-commanded, so restoring drives and damping remain part of the response.
-Hybrid operation, effort calibration, loaded equilibrium, and performance
-are not validated by the position-mode tests presented here. Large illustrative
-torque values in operational examples must not be transferred to hardware.
+This is a \emph{torque-commanded admittance controller}, not raw open-loop
+body-torque actuation and not a measured physical constitutive law. Earlier
+raw-torque diagnostics produced 3.5555\degrees{} at 0.001~N\,m and
+7.1150\degrees{} at 0.002~N\,m, but curvature was nonuniform and depended on
+gravity and effective joint inertia. A temporary low-stiffness force-spring
+trial also concentrated curvature toward distal intervals. Those approaches
+were rejected because they did not reproduce the required constant-curvature
+shape.
+
+The latest direct-topology bounded tests measured 18.0000\degrees{},
+90.0000\degrees{}, 180.0001\degrees{}, and 270.0000\degrees{} at 0.001,
+0.005, 0.010, and 0.015~N\,m. All five interval rotations were respectively
+approximately 3.6\degrees{}, 18\degrees{}, 36\degrees{}, and 54\degrees{}.
+Negative torque produces the opposite signed target. These values verify the
+implemented software mapping; they must not be interpreted as hardware torque
+characterization.
+
+The prior serial A/B topology reached only approximately 262.3\degrees{} for a
+270\degrees{} request and stopped near 52\degrees{} per later disc interval.
+Collision filtering, increased drive gains, and asymmetric A/B targets did not
+remove this ceiling and were not retained. Replacing each runtime serial pair
+with one direct disc-to-disc D6 joint produced 270.0000\degrees{}, with all five
+intervals at approximately 54.0000\degrees{}. A 360\degrees{} working range is
+not claimed.
+
+While a nonzero torque command is active, incoming bend-position callbacks are
+ignored, preventing a stale 20~Hz position publisher from zeroing the torque
+command. The loader logs a warning when it first rejects a position command.
+Publishing zero torque releases this priority. One controller at a time remains
+the required experimental practice.
 
 \section{Six virtual strain gauges}
 \subsection{Placement and retained topic names}
@@ -533,17 +582,18 @@ Joint \texttt{roll/position} & Local bend target in degrees; base and pairs
 01--04 A/B. Identified legacy targets are converted by the adapter.\\
 Joint \texttt{yaw/position} & Bending-plane direction in degrees, wrapped
 around the circumference.\\
-Joint \texttt{roll/torque} & Scalar direct bending effort, labeled N\,m.\\
-\texttt{measured\_tip/phi} & Norm of relative tip rotation-vector X/Y components,
-converted to degrees.\\
-\texttt{measured\_tip/theta} & Direction from those components in degrees.\\
+Joint \texttt{roll/torque} & Scalar torque command in N\,m, interpreted through
+the calibrated admittance law.\\
+\texttt{measured\_tip/phi} & Norm of the sum of adjacent-disc local X/Y
+rotation vectors, converted to degrees.\\
+\texttt{measured\_tip/theta} & Direction from that accumulated vector in degrees.\\
 \texttt{measured\_tip/orientation} & Relative tip quaternion $[w,x,y,z]$.\\
 Ring \texttt{strain} & Three-element \texttt{Float64MultiArray}, microstrain.\\
 Ring \texttt{gauge\_1..3/strain} & Individual scalar microstrain channels.\\
 Ring \texttt{bridge\_voltage} & Three-element ideal quarter-bridge output in V.\\
 Ring \texttt{bridge\_valid} & Three-element 1.0/0.0 nominal-range flag.\\
-Ring \texttt{gauge\_1..3/bridge\_voltage} & Individual scalar voltage channels.\\
-Ring \texttt{gauge\_1..3/bridge\_valid} & Individual Boolean validity channels.\\
+Ring \path{gauge_1..3/bridge_voltage} & Individual scalar voltage channels.\\
+Ring \path{gauge_1..3/bridge_valid} & Individual Boolean validity channels.\\
 Ring \texttt{orientation, phi, theta} & Ring pose relative to the base;
 quaternion and derived angles.\\
 \texttt{/robot\_description} & Generated URDF for robot-state publisher/RViz.\\
@@ -551,9 +601,12 @@ quaternion and derived angles.\\
 and visualization transforms.\\
 \bottomrule
 \end{longtable}
-The joint topic prefix is \texttt{/soft\_limb/pair\_XX/...}; ring topics use
-\texttt{/soft\_limb/sensors/<station>/...}; measured-tip topics use
-\texttt{/soft\_limb/measured\_tip/...}.
+The corresponding topic prefixes are:
+\begin{itemize}
+\item joint commands: \path{/soft_limb/pair_XX/...};
+\item sensor rings: \path{/soft_limb/sensors/<station>/...}; and
+\item measured tip: \path{/soft_limb/measured_tip/...}.
+\end{itemize}
 
 The working launch starts two Matplotlib plotters: one subscribes to all six
 individual strain channels and one to all six bridge-voltage channels. Each
@@ -572,16 +625,19 @@ time at 240~Hz (2880 physics steps); it measures the last simulated second.
 It does not start the complete RViz/plotter launch. Thus it is an end-to-end
 command-to-physics test, not a full graphical-launch validation.
 
-The target tip quaternion is constructed from axis
-$\mathbf{a}(\Theta)$ and angle $\Phi_c$. Full orientation error is
+For position tests through 180\degrees{}, the target tip quaternion is
+constructed from axis $\mathbf{a}(\Theta)$ and angle $\Phi_c$. Full orientation
+error is
 \begin{equation}
 e_R=\left\|\operatorname{rotvec}(q_{\mathrm{target}}^{-1}
 q_{\mathrm{tip}})\right\|,
 \end{equation}
-reported in degrees. Reported phi is the norm of the relative tip
-rotation-vector's X/Y components. This metric is not a signed accumulated
-arc angle and uses a shortest-path orientation representation; bends beyond
-180\degrees{} cannot be interpreted as an unwrapped total angle from it.
+reported in degrees. Reported phi instead sums the local X/Y rotation vector
+$\operatorname{rotvec}(q_i^{-1}q_{i+1})$ over all five disc intervals and
+takes the norm of the result. Each local increment remains on its shortest
+quaternion path, but their sum can represent an accumulated bend above
+180\degrees{}. The raw published tip quaternion remains orientation-only and
+cannot by itself distinguish, for example, 0\degrees{} from 360\degrees{}.
 
 Harness tolerances are 2\degrees{} full orientation error and a 1\degrees{}
 peak-to-peak phi range during the final second. These are software-test
@@ -592,11 +648,15 @@ on exit status alone.
 
 \begin{table}[htbp]
 \centering
-\begin{tabular}{p{0.33\linewidth}lll}
+\begin{tabular}{p{0.29\linewidth}p{0.20\linewidth}p{0.27\linewidth}l}
 \toprule
 Case & Final phi & Full tip error & Status\\\midrule
-Working controller, 180\degrees{}, theta=0 & 179.9996\degrees{} & 0.0004\degrees{} & PASS\\
+Working controller, 180\degrees{}, theta=0 & 180.0001\degrees{} & 0.0001\degrees{} & PASS\\
 Legacy controller with adapter, same target & 179.9996\degrees{} & 0.0004\degrees{} & PASS\\
+Torque admittance, 0.001~N\,m & 18.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
+Torque admittance, 0.005~N\,m & 90.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
+Torque admittance, 0.010~N\,m & 180.0001\degrees{} & 0.0001\degrees{} mapping error & PASS\\
+Torque admittance, 0.015~N\,m & 270.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
 Large diagonal, 180\degrees{}, theta=45\degrees{} & About 178.93\degrees{} & About 10.25\degrees{} & Limitation\\
 User observation before compatibility fix & 81.8181568\degrees{} & Not recorded & Mismatch\\
 \bottomrule
@@ -640,8 +700,13 @@ neither has been validated against real gauges or an independent material model.
 Stale/duplicate controllers and nonstandard remappings remain operational risks.
 \item Two sensor rings cannot uniquely recover arbitrary distributed curvature,
 torsion, axial stretch, or full shape without additional assumptions.
-\item The quadruped, hybrid control, and two-physical-limb backup have not been
-validated by the latest single-limb position regression.
+\item The current direct-topology torque-admittance law has been verified only
+for unloaded, single-axis simulation at four positive commands from 0.001 to
+0.015~N\,m through 270\degrees{}. It is not raw torque
+control, a material constitutive model, or a hardware calibration; negative
+commands, payloads, disturbances, and arbitrary bending directions require
+separate validation. The quadruped and two-physical-limb backup were not part
+of these tests.
 \end{enumerate}
 
 \section{Reproducible operation and asset handling}
@@ -757,11 +822,12 @@ large-angle diagonal error without sacrificing stable compliant motion.
 
 \section{Conclusion}
 The working platform now supports a six-disc hanging leader, separate position
-and preliminary hybrid interfaces, six pose-derived strain channels, live
+and calibrated torque-admittance interfaces, six pose-derived strain channels, live
 graphs, and sensor-driven RViz reconstruction. The confirmed eleven-versus-five
 normalization failure was corrected in the loader and reproduced in a
-successful legacy-controller regression. The reported 179.9996\degrees{}
-single-axis result is a specific software verification result. Physical
+successful legacy-controller regression. The latest reported 180.0001\degrees{}
+position result and 270.0000\degrees{} torque-admittance endpoint are specific
+software verification results. Physical
 strain validity, exact inextensible constant-curvature geometry, arbitrary
 bending-direction accuracy, and hardware applicability remain open research
 tasks rather than established conclusions.
@@ -794,7 +860,7 @@ and plots.\\
 \path{scripts/load_soft_limb_working.py} & Physics configuration, command
 consumption, sensing, torque application, and reconstruction.\\
 \path{scripts/control_soft_limb_working.py} & Five-interval position command.\\
-\path{scripts/control_soft_limb_hybrid_working.py} & Preliminary hybrid effort
+\path{scripts/control_soft_limb_hybrid_working.py} & Calibrated torque-admittance
 and direction command.\\
 \path{soft_world/limb_configuration_working.py} & Shared six-disc topology,
 tip index, bend normalization, and stage validation.\\

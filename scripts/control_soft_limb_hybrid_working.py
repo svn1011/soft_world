@@ -9,9 +9,10 @@ from limb_configuration_working import JOINT_COUNT
 
 
 PUBLISH_RATE_HZ = 20.0
+MAX_RECOMMENDED_ABS_TORQUE = 0.015
 
-# Phi is roll torque in N*m; theta is yaw position in degrees.
-PHI_TORQUE = 0.0
+# Phi is the torque-command input in N*m; theta is direction in degrees.
+PHI_TORQUE = 10.0
 THETA_POSITION_DEGREES = 0.0
 
 
@@ -22,6 +23,7 @@ class SoftLimbHybridPublisher(Node):
         super().__init__("soft_limb_hybrid_controller")
         self._command_publishers = {}
         self._last_command = None
+        self._last_clipped_torque = None
 
         self.declare_parameter("phi_torque", PHI_TORQUE)
         self.declare_parameter(
@@ -61,7 +63,21 @@ class SoftLimbHybridPublisher(Node):
 
     def publish_commands(self):
         """Publish the current hybrid command to every D6 joint."""
-        phi_torque = float(self.get_parameter("phi_torque").value)
+        requested_torque = float(self.get_parameter("phi_torque").value)
+        phi_torque = max(
+            -MAX_RECOMMENDED_ABS_TORQUE,
+            min(MAX_RECOMMENDED_ABS_TORQUE, requested_torque),
+        )
+        if requested_torque != phi_torque:
+            if requested_torque != self._last_clipped_torque:
+                self.get_logger().warning(
+                    f"Requested torque {requested_torque:.6f} N*m exceeds "
+                    f"the working range; using {phi_torque:.6f} N*m. "
+                    "Commands above the useful range only force joint stops."
+                )
+            self._last_clipped_torque = requested_torque
+        else:
+            self._last_clipped_torque = None
         theta_position = float(
             self.get_parameter("theta_position").value
         )

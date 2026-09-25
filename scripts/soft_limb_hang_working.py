@@ -25,7 +25,7 @@ BASE_HEIGHT = 0.40
 # Position-drive parameters shared by the standalone limb and quadruped.
 BEND_STIFFNESS = 6400
 BEND_DAMPING = 240
-MAX_BEND_DEGREES = 40.0
+MAX_BEND_DEGREES = 80.0
 VIRTUAL_LINK_OFFSET = 0.0005  # 0.5 mm between the two serial joints
 VIRTUAL_LINK_MASS = 0.01
 VIRTUAL_LINK_INERTIA = 1.0e-6

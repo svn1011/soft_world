@@ -17,7 +17,7 @@ from isaacsim.core.prims import RigidPrim
 from isaacsim.core.utils.stage import open_stage
 from isaacsim.core.utils.viewports import set_camera_view
 from omni.physx import get_physx_interface
-from pxr import Gf, PhysxSchema, UsdGeom, UsdPhysics
+from pxr import Gf, PhysxSchema, Sdf, UsdGeom, UsdPhysics
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
@@ -39,12 +39,16 @@ from bridge_model_working import (
 
 MAX_ABS_BEND_POSITION_DEGREES = 40.0
 MAX_TARGET_SPEED_DEGREES_PER_SECOND = 20.0
-MAX_ABS_TORQUE = 1_000_000.0
-MAX_TORQUE_SLEW_RATE = 2_000_000.0
+# Calibrated admittance target: 0.010 N*m maps to 180 degrees and the full
+# 0.015 N*m working range maps to a 270-degree uniform-curvature equilibrium.
+# This is a torque-commanded controller, not raw open-loop body torque.
+MAX_ABS_TORQUE = 0.015
+MAX_TORQUE_SLEW_RATE = 0.020
+MAX_TOTAL_TORQUE_MODE_BEND_DEGREES = 270.0
 # Restore the stable 25 mm-interval mass-normalized drive gains.
 BEND_STIFFNESS = 6400
 BEND_DAMPING = 240
-MAX_BEND_DEGREES = 40.0
+MAX_BEND_DEGREES = 80.0
 SOFT_LIMB_USD_NAME = os.environ.get(
     "SOFT_LIMB_USD_NAME", "soft_limb_position_control_6_disc_working.usd"
 )
@@ -69,11 +73,53 @@ MASTER_LIMB_PATH = "/World/SoftLimb"
 
 
 def joint_paths(assembly_path=MASTER_LIMB_PATH):
-    """Yield the base joint followed by both joints in each later pair."""
+    """Yield the five direct runtime joints between adjacent discs."""
     yield f"{assembly_path}/Joints/Pair_00_Base_D6Joint"
     for index in range(1, JOINT_COUNT):
-        yield f"{assembly_path}/Joints/Pair_{index:02d}_D6A"
-        yield f"{assembly_path}/Joints/Pair_{index:02d}_D6B"
+        yield f"{assembly_path}/Joints/Pair_{index:02d}_Direct_D6Joint"
+
+
+def replace_split_joints_with_direct(stage, assembly_path=MASTER_LIMB_PATH):
+    """Replace each constraint-limited serial A/B pair with one direct D6."""
+    for pair_index in range(1, JOINT_COUNT):
+        for suffix in ("D6A", "D6B"):
+            old_joint = stage.GetPrimAtPath(
+                f"{assembly_path}/Joints/Pair_{pair_index:02d}_{suffix}"
+            )
+            if old_joint.IsValid():
+                old_joint.SetActive(False)
+
+        virtual_link = stage.GetPrimAtPath(
+            f"{assembly_path}/VirtualLinks/Pair_{pair_index:02d}_Link"
+        )
+        if virtual_link.IsValid():
+            UsdPhysics.RigidBodyAPI.Apply(
+                virtual_link
+            ).CreateKinematicEnabledAttr().Set(True)
+
+        joint_path = (
+            f"{assembly_path}/Joints/Pair_{pair_index:02d}_Direct_D6Joint"
+        )
+        joint = UsdPhysics.Joint.Define(stage, joint_path)
+        joint.CreateBody0Rel().SetTargets(
+            [Sdf.Path(f"{assembly_path}/Disk_{pair_index:02d}")]
+        )
+        joint.CreateBody1Rel().SetTargets(
+            [Sdf.Path(f"{assembly_path}/Disk_{pair_index + 1:02d}")]
+        )
+        joint.CreateLocalPos0Attr().Set(
+            Gf.Vec3f(0.0, 0.0, -DISK_PITCH * 0.5)
+        )
+        joint.CreateLocalPos1Attr().Set(
+            Gf.Vec3f(0.0, 0.0, DISK_PITCH * 0.5)
+        )
+        joint.CreateLocalRot0Attr().Set(Gf.Quatf(1.0))
+        joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0))
+        joint.CreateCollisionEnabledAttr().Set(False)
+        for axis in ("transX", "transY", "transZ"):
+            limit = UsdPhysics.LimitAPI.Apply(joint.GetPrim(), axis)
+            limit.CreateLowAttr().Set(1.0)
+            limit.CreateHighAttr().Set(-1.0)
 
 
 def configure_joint_drives(stage, assembly_path=MASTER_LIMB_PATH):
@@ -96,7 +142,7 @@ def configure_joint_drives(stage, assembly_path=MASTER_LIMB_PATH):
 
         # The A/B joints each represent half an interval, so their rotational
         # stiffness and damping are doubled (K = EI / length).
-        length_scale = 1.0 if "Pair_00_Base" in joint_path else 2.0
+        length_scale = 1.0
         for axis in ("rotX", "rotY"):
             rotation_limit = UsdPhysics.LimitAPI.Apply(joint_prim, axis)
             rotation_limit.CreateLowAttr().Set(-MAX_BEND_DEGREES)
@@ -230,6 +276,18 @@ def quaternion_rotation_vector(quaternion):
     return angle * vector / vector_norm
 
 
+def accumulated_bend_vector(orientations):
+    """Sum local inter-disc bend vectors so total bend can exceed 180 degrees."""
+    orientations = np.asarray(orientations, dtype=np.float64)
+    total = np.zeros(2, dtype=np.float64)
+    for previous, current in zip(orientations[:-1], orientations[1:]):
+        local_rotation = quaternion_rotation_vector(
+            relative_quaternion(previous, current)
+        )
+        total += local_rotation[:2]
+    return total
+
+
 class SoftLimbCommandSubscriber(Node):
     """Receive phi bend magnitude/torque and theta direction."""
 
@@ -258,6 +316,7 @@ class SoftLimbCommandSubscriber(Node):
             JOINT_COUNT - 1, dtype=np.float32
         )
         self._drive_targets = []
+        self._position_ignored_during_torque_warned = False
         self._sensor_publishers = {}
         self._tip_publishers = {
             "orientation": self.create_publisher(
@@ -350,7 +409,10 @@ class SoftLimbCommandSubscriber(Node):
     def _subscribe_joint(
         self, topic_root, command, applied, torque_command, joint_path, stage
     ):
-        joint_prim = stage.GetPrimAtPath(joint_path)
+        runtime_joint_path = joint_path
+        if joint_path.endswith(("_D6A", "_D6B")):
+            runtime_joint_path = joint_path.rsplit("_", 1)[0] + "_Direct_D6Joint"
+        joint_prim = stage.GetPrimAtPath(runtime_joint_path)
         x_target = UsdPhysics.DriveAPI(
             joint_prim, "rotX"
         ).GetTargetPositionAttr()
@@ -390,8 +452,22 @@ class SoftLimbCommandSubscriber(Node):
             10,
         )
 
-    @staticmethod
-    def _set_roll_position(command, torque_command, message, topology_scale=1.0):
+    def _set_roll_position(
+        self, command, torque_command, message, topology_scale=1.0
+    ):
+        # Torque-admittance mode owns the bend axis until its controller publishes
+        # zero.  Otherwise a stale position publisher can cancel torque at the
+        # next 20 Hz callback, making increases appear to have no effect.
+        if abs(torque_command[0]) > 1.0e-9:
+            if not self._position_ignored_during_torque_warned:
+                self.get_logger().warning(
+                    "Ignoring bend-position commands while nonzero torque "
+                    "torque is active. Publish zero torque before returning "
+                    "to position control."
+                )
+                self._position_ignored_during_torque_warned = True
+            return
+        self._position_ignored_during_torque_warned = False
         command[0] = np.clip(
             message.data * topology_scale,
             -MAX_ABS_BEND_POSITION_DEGREES,
@@ -411,22 +487,7 @@ class SoftLimbCommandSubscriber(Node):
         command[1] = (message.data + 180.0) % 360.0 - 180.0
 
     def update_drive_targets(self, time_step):
-        """Move the mass-normalized servo targets toward live commands."""
-        max_step = MAX_TARGET_SPEED_DEGREES_PER_SECOND * time_step
-        for command, applied, x_target, y_target in self._drive_targets:
-            applied[0] += np.clip(
-                command[0] - applied[0], -max_step, max_step
-            )
-            direction_delta = (
-                command[1] - applied[1] + 180.0
-            ) % 360.0 - 180.0
-            applied[1] += np.clip(
-                direction_delta, -max_step, max_step
-            )
-            direction = np.deg2rad(applied[1])
-            x_target.Set(float(-applied[0] * np.sin(direction)))
-            y_target.Set(float(applied[0] * np.cos(direction)))
-
+        """Move position or torque-admittance targets toward live commands."""
         max_torque_step = MAX_TORQUE_SLEW_RATE * time_step
         torque_groups = (
             (self.base_torque_command, self.base_torque_applied),
@@ -438,8 +499,69 @@ class SoftLimbCommandSubscriber(Node):
                 commands - applied, -max_torque_step, max_torque_step
             )
 
+        max_step = MAX_TARGET_SPEED_DEGREES_PER_SECOND * time_step
+        for drive_index, (command, applied, x_target, y_target) in enumerate(
+            self._drive_targets
+        ):
+            applied_torque = self._torque_applied_for_drive(drive_index)
+            if abs(applied_torque) > 1.0e-9:
+                joint_share = (
+                    1.0 / JOINT_COUNT if drive_index == 0
+                    else 1.0 / (2.0 * JOINT_COUNT)
+                )
+                target_bend = (
+                    applied_torque / MAX_ABS_TORQUE
+                    * MAX_TOTAL_TORQUE_MODE_BEND_DEGREES
+                    * joint_share
+                )
+            else:
+                target_bend = command[0]
+            applied[0] += np.clip(
+                target_bend - applied[0], -max_step, max_step
+            )
+            direction_delta = (
+                command[1] - applied[1] + 180.0
+            ) % 360.0 - 180.0
+            applied[1] += np.clip(
+                direction_delta, -max_step, max_step
+            )
+            direction = np.deg2rad(applied[1])
+            if drive_index == 0:
+                x_target.Set(float(-applied[0] * np.sin(direction)))
+                y_target.Set(float(applied[0] * np.cos(direction)))
+                continue
+
+            # The compatibility A/B messages are two half-interval vectors.
+            # Wait for the B entry, then add both vectors and write their one
+            # shared direct runtime joint exactly once.
+            _, half_index = divmod(drive_index - 1, 2)
+            if half_index == 0:
+                continue
+            pair_index = (drive_index - 2) // 2
+            a_bend, a_direction_degrees = self.d6_a_applied[pair_index]
+            b_bend, b_direction_degrees = self.d6_b_applied[pair_index]
+            a_direction = np.deg2rad(a_direction_degrees)
+            b_direction = np.deg2rad(b_direction_degrees)
+            x_target.Set(float(
+                -a_bend * np.sin(a_direction)
+                -b_bend * np.sin(b_direction)
+            ))
+            y_target.Set(float(
+                a_bend * np.cos(a_direction)
+                + b_bend * np.cos(b_direction)
+            ))
+
+    def _torque_applied_for_drive(self, drive_index):
+        """Return the applied torque corresponding to one ordered D6 drive."""
+        if drive_index == 0:
+            return self.base_torque_applied[0]
+        pair_offset, half_index = divmod(drive_index - 1, 2)
+        if half_index == 0:
+            return self.d6_a_torque_applied[pair_offset]
+        return self.d6_b_torque_applied[pair_offset]
+
     def position_mode_active(self):
-        """Return true while no direct phi-torque command is active."""
+        """Return true while no phi torque-admittance command is active."""
         return not any(
             np.any(np.abs(torques) > 1.0e-9)
             for torques in (
@@ -462,8 +584,9 @@ class SoftLimbCommandSubscriber(Node):
         tip_orientation = relative_quaternion(
             base_orientation, disk_orientations[TIP_DISK_INDEX]
         )
-        tip_rotation = quaternion_rotation_vector(tip_orientation)
-        tip_x, tip_y = tip_rotation[:2]
+        tip_x, tip_y = accumulated_bend_vector(
+            disk_orientations[:TIP_DISK_INDEX + 1]
+        )
         tip_phi = np.rad2deg(np.hypot(tip_x, tip_y))
         tip_theta = np.rad2deg(np.arctan2(-tip_x, tip_y))
         tip_orientation_message = Float64MultiArray()
@@ -481,13 +604,10 @@ class SoftLimbCommandSubscriber(Node):
         for station_name, disk_index, angles, _ in SENSOR_STATIONS:
             publishers = self._sensor_publishers[station_name]
 
-            station_orientation = relative_quaternion(
-                base_orientation, disk_orientations[disk_index]
+            station_rotation = accumulated_bend_vector(
+                disk_orientations[:disk_index + 1]
             )
-            station_rotation = quaternion_rotation_vector(
-                station_orientation
-            )
-            bend_x, bend_y = station_rotation[:2]
+            bend_x, bend_y = station_rotation
             phi_degrees = np.rad2deg(np.hypot(bend_x, bend_y))
             theta_degrees = np.rad2deg(np.arctan2(-bend_x, bend_y))
 
@@ -545,67 +665,10 @@ class SoftLimbCommandSubscriber(Node):
                 )
                 validity_publisher.publish(Bool(data=bool(bridge_valid)))
 
-    @staticmethod
-    def _world_bend_directions(orientations, directions_degrees):
-        """Rotate local theta-directed X-Y axes into world coordinates."""
-        orientations = np.asarray(orientations, dtype=np.float32)
-        w = orientations[:, 0]
-        x = orientations[:, 1]
-        y = orientations[:, 2]
-        z = orientations[:, 3]
-        x_axes = np.column_stack(
-            (
-                1.0 - 2.0 * (y * y + z * z),
-                2.0 * (x * y + w * z),
-                2.0 * (x * z - w * y),
-            )
-        )
-        y_axes = np.column_stack(
-            (
-                2.0 * (x * y - w * z),
-                1.0 - 2.0 * (x * x + z * z),
-                2.0 * (y * z + w * x),
-            )
-        )
-        directions = np.deg2rad(directions_degrees)
-        return (
-            -np.sin(directions)[:, None] * x_axes
-            + np.cos(directions)[:, None] * y_axes
-        ).astype(np.float32)
-
     def body_torques(self, disk_orientations, virtual_orientations):
-        """Convert joint roll torques into equal/opposite body torques."""
+        """Return zero raw torques; torque commands drive calibrated targets."""
         disk_torques = np.zeros((JOINT_COUNT + 1, 3), dtype=np.float32)
         virtual_torques = np.zeros((JOINT_COUNT - 1, 3), dtype=np.float32)
-        base_axis = self._world_bend_directions(
-            disk_orientations[:1], self.base_applied[1:2]
-        )[0]
-        d6_a_axes = self._world_bend_directions(
-            disk_orientations[1:JOINT_COUNT], self.d6_a_applied[:, 1]
-        )
-        d6_b_axes = self._world_bend_directions(
-            virtual_orientations, self.d6_b_applied[:, 1]
-        )
-
-        base_torque = self.base_torque_applied[0] * base_axis
-        disk_torques[0] -= base_torque
-        disk_torques[1] += base_torque
-
-        for command_index in range(JOINT_COUNT - 1):
-            pair_index = command_index + 1
-            d6_a_torque = (
-                self.d6_a_torque_applied[command_index]
-                * d6_a_axes[command_index]
-            )
-            d6_b_torque = (
-                self.d6_b_torque_applied[command_index]
-                * d6_b_axes[command_index]
-            )
-            disk_torques[pair_index] -= d6_a_torque
-            virtual_torques[command_index] += d6_a_torque
-            virtual_torques[command_index] -= d6_b_torque
-            disk_torques[pair_index + 1] += d6_b_torque
-
         return disk_torques, virtual_torques
 
 
@@ -737,7 +800,9 @@ def main():
         raise RuntimeError(f"Isaac Sim could not open {usd_path}")
 
     from omni.usd import get_context
-    validate_stage(get_context().get_stage())
+    stage = get_context().get_stage()
+    validate_stage(stage)
+    replace_split_joints_with_direct(stage)
     print(f"SIX-DISC working limb: {JOINT_COUNT} bend intervals; tip {DISK_PATHS[-1]}")
 
     # Attach the World API to the physics scene already stored in the USD.
@@ -788,8 +853,6 @@ def main():
     virtual_gravity_compensation[:, 2] = (
         VIRTUAL_LINK_MASS * GRAVITY_ACCELERATION
     )
-    zero_disk_forces = np.zeros_like(disk_gravity_compensation)
-    zero_virtual_forces = np.zeros_like(virtual_gravity_compensation)
     world.play()
 
     started_rclpy = not rclpy.ok()
@@ -818,6 +881,10 @@ def main():
         f"Bend limit        : +/-{MAX_ABS_BEND_POSITION_DEGREES} degrees"
     )
     print(f"Torque limit      : +/-{MAX_ABS_TORQUE} N*m")
+    print(
+        "Torque calibration: 0.001/0.005/0.010/0.015 N*m -> "
+        "approximately 18/90/180/270 degrees"
+    )
     print(
         f"Target speed limit: {MAX_TARGET_SPEED_DEGREES_PER_SECOND} deg/s"
     )
@@ -869,12 +936,12 @@ def main():
             disk_torques, virtual_torques = command_subscriber.body_torques(
                 disk_orientations, virtual_orientations
             )
-            if command_subscriber.position_mode_active():
-                disk_forces = disk_gravity_compensation
-                virtual_forces = virtual_gravity_compensation
-            else:
-                disk_forces = zero_disk_forces
-                virtual_forces = zero_virtual_forces
+            # Use the same weight compensation in position and torque modes.
+            # Without it, a hanging chain has a much larger gravitational
+            # restoring moment near the base.  Keeping compensation active
+            # makes both controller modes use the same unloaded reference.
+            disk_forces = disk_gravity_compensation
+            virtual_forces = virtual_gravity_compensation
             disks.apply_forces_and_torques_at_pos(
                 forces=disk_forces,
                 torques=disk_torques,

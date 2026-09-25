@@ -232,14 +232,16 @@ ros2 param set /soft_limb_position_controller theta_position 180.0
 
 Run only one soft-limb controller at a time.
 
-The current source default is `phi_position=90.0` and
+The current position source default is `phi_position=90.0` and
 `theta_position=0.0`. Supplying explicit command-line parameters is therefore
-recommended. The hybrid controller defaults to zero torque and zero direction.
+recommended. The hybrid script's current source request is `10.0 N·m`, which
+is clipped to the 0.015 N·m working limit; pass `phi_torque` explicitly for a
+reproducible experiment.
 
 The position controller accepts total phi up to ±180°. At 180° the five
 intervals each receive 36°: the base D6 receives 36°, and each later serial
-A/B joint receives 18°. Physical X/Y joint limits are ±40° to accommodate
-this without clipping. Larger total requests are clamped with a warning;
+A/B joint receives 18°. Physical X/Y joint limits are ±80° to accommodate
+the extended torque-admittance range. Larger position requests are clamped;
 theta still selects directions around the full circumference.
 
 Commanded phi is the orientation change between the base and tip discs, not
@@ -253,21 +255,57 @@ ros2 topic echo /soft_limb/measured_tip/phi
 ros2 topic echo /soft_limb/measured_tip/theta
 ros2 topic echo /soft_limb/measured_tip/orientation
 ```
-## Hybrid torque/position control (PENDING)
+## Hybrid torque/direction control (calibrated admittance)
 
 ```bash
 cd "$SOFT_WORLD_WS"
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 python3 scripts/control_soft_limb_hybrid_working.py --ros-args \
-  -p phi_torque:=1000.0 \
+  -p phi_torque:=0.001 \
   -p theta_position:=90.0
 ```
 
-- `phi_torque`: bending torque in N·m.
+- `phi_torque`: torque-command input in N·m for the calibrated admittance.
 - `theta_position`: bend direction in degrees.
 
-Torque mode controls effort and therefore does not guarantee an exact angle.
+The working hybrid controller is a calibrated torque-to-curvature admittance
+controller. It accepts torque in N·m and maps the requested quasi-static
+equilibrium bend linearly:
+
+```text
+total phi = 180 degrees * torque / 0.010 N*m
+```
+
+Consequently, 0.001, 0.005, 0.010, and 0.015 N·m request approximately 18°,
+90°, 180°, and 270°. Negative torque reverses the bend. The command is
+clamped to ±0.015 N·m. Bounded headless tests measured 18.0000°, 90.0000°,
+180.0001°, and 270.0000° at those four commands, with equal bend at all five
+disc intervals.
+
+Measured phi is now the sum of the local bend vectors between adjacent discs.
+A single base-to-tip quaternion uses the shortest rotation and would fold
+angles above 180° back toward zero, so it cannot represent this extended range.
+
+This is not raw open-loop torque actuation and it is not a physical
+torque-versus-angle calibration. The acceleration drives enforce the uniform
+constant-curvature equilibrium derived from the torque command. This behavior
+was selected because raw body torque depended strongly on gravity and joint
+inertia and did not reproduce the position-controlled constant-curvature shape.
+The former 1000 N·m example was also far beyond the useful range and forced
+joints against their limits. The USD still contains the historical serial A/B
+joints for compatibility, but the loader deactivates those constraints and
+creates one direct D6 joint per disc interval before PhysX initializes. The
+loader vector-sums the two legacy A/B half-angle commands into that direct
+joint's full interval target. This removes the serial pair's former
+52° ceiling and makes 270° (54° per interval) repeatable. The virtual helper
+links are retained as kinematic compatibility objects.
+
+While a nonzero torque command is active, bend-position callbacks are ignored;
+this prevents a stale position controller from cancelling torque at 20 Hz.
+The loader warns once when it rejects such a position command. Publish zero
+torque before returning to position control. Running one controller at a time
+is still required for reproducible experiments.
 
 ## Constant-curvature convention
 
