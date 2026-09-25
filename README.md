@@ -281,18 +281,22 @@ equilibrium bend linearly:
 total phi = 180 degrees * torque / 1.0 N*m
 ```
 
-Consequently, 0.1, 0.5, 1.0, and 1.5 N·m request approximately 18°, 90°,
-180°, and 270°. Negative torque reverses the bend. The command is clamped to
-±1.5 N·m. This is a 100× rescaling of the command interface; the simulated
+Consequently, 0.1, 0.5, and 1.0 N·m request approximately 18°, 90°, and
+180°. Negative torque reverses the bend. The command is clamped to ±1.0 N·m,
+so larger magnitudes cannot request a bend beyond 180°. This is a 100×
+rescaling of the command interface; the simulated
 equilibrium behavior is unchanged. The range corresponds to approximately
-0--15.3 kgf·cm and is easier to compare with compact actuator ratings, but it
+0--10.2 kgf·cm and is easier to compare with compact actuator ratings, but it
 is not a measured torque requirement for the physical limb.
-Headless Isaac regressions measured 18.0000°, 90.0000°, 179.9999°, and
-270.0000° at those four commands, with equal bend across all five intervals.
+Headless Isaac regressions measured 18.0000°, 90.0000°, and 179.9999° at
+those three commands, with equal bend across all five intervals.
+An explicit 1.5 N·m over-limit regression was clipped to 1.0 N·m and measured
+179.9999°, confirming that the active controller cannot request more than 180°.
 
 Measured phi is now the sum of the local bend vectors between adjacent discs.
 A single base-to-tip quaternion uses the shortest rotation and would fold
-angles above 180° back toward zero, so it cannot represent this extended range.
+angles above 180° back toward zero. The active controller is now intentionally
+limited to 180°.
 
 This is not raw open-loop torque actuation and it is not a physical
 torque-versus-angle calibration. The acceleration drives enforce the uniform
@@ -305,7 +309,8 @@ joints for compatibility, but the loader deactivates those constraints and
 creates one direct D6 joint per disc interval before PhysX initializes. The
 loader vector-sums the two legacy A/B half-angle commands into that direct
 joint's full interval target. This removes the serial pair's former
-52° ceiling and makes 270° (54° per interval) repeatable. The virtual helper
+52° ceiling. A prior development configuration demonstrated a repeatable 270°
+result, but the active working controller now stops at 180°. The virtual helper
 links are retained as kinematic compatibility objects.
 
 While a nonzero torque command is active, bend-position callbacks are ignored;

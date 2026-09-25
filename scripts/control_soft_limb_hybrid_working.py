@@ -9,7 +9,7 @@ from limb_configuration_working import JOINT_COUNT
 
 
 PUBLISH_RATE_HZ = 20.0
-MAX_RECOMMENDED_ABS_TORQUE = 1.5
+MAX_RECOMMENDED_ABS_TORQUE = 1.0
 
 # Phi is the torque-command input in N*m; theta is direction in degrees.
 PHI_TORQUE = 0.0

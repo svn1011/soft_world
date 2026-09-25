@@ -63,6 +63,9 @@ def main():
                 Parameter("phi_torque", value=args.torque),
                 Parameter("theta_position", value=args.theta),
             ])
+            expected_applied_torque = float(np.clip(
+                args.torque, -limb.MAX_ABS_TORQUE, limb.MAX_ABS_TORQUE
+            ))
         elif args.legacy_controller:
             from control_soft_limb import SoftLimbPositionPublisher
             controller = SoftLimbPositionPublisher()
@@ -85,9 +88,13 @@ def main():
             limb.rclpy.spin_once(node, timeout_sec=0.01)
             if args.torque is not None:
                 delivered = (
-                    np.isclose(node.base_torque_command[0], args.torque)
-                    and np.allclose(node.d6_a_torque_commands, args.torque)
-                    and np.allclose(node.d6_b_torque_commands, args.torque)
+                    np.isclose(node.base_torque_command[0], expected_applied_torque)
+                    and np.allclose(
+                        node.d6_a_torque_commands, expected_applied_torque
+                    )
+                    and np.allclose(
+                        node.d6_b_torque_commands, expected_applied_torque
+                    )
                 )
             else:
                 expected = args.phi / limb.JOINT_COUNT
@@ -197,13 +204,15 @@ def main():
         else:
             expected_phi = min(
                 limb.MAX_TOTAL_TORQUE_MODE_BEND_DEGREES,
-                abs(args.torque) / limb.MAX_ABS_TORQUE
+                abs(expected_applied_torque) / limb.MAX_ABS_TORQUE
                 * limb.MAX_TOTAL_TORQUE_MODE_BEND_DEGREES,
             )
             measured_phi = float(np.mean(measurements))
             tracking_error = abs(measured_phi - expected_phi)
             interval_spread = max(intervals) - min(intervals)
-            print(f"VERIFY torque={args.torque} N*m theta={args.theta}: "
+            print(f"VERIFY requested_torque={args.torque} N*m "
+                  f"applied_torque={expected_applied_torque} N*m "
+                  f"theta={args.theta}: "
                   f"expected_phi={expected_phi:.4f} deg; "
                   f"tracking_error={tracking_error:.4f} deg; "
                   f"last_second_phi_range={min(measurements):.4f}.."

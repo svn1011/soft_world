@@ -39,12 +39,12 @@ from bridge_model_working import (
 
 MAX_ABS_BEND_POSITION_DEGREES = 40.0
 MAX_TARGET_SPEED_DEGREES_PER_SECOND = 30.0
-# Actuator-scale admittance target: 1.0 N*m maps to 180 degrees and the full
-# 1.5 N*m working range maps to a 270-degree uniform-curvature equilibrium.
+# Actuator-scale admittance target: 1.0 N*m maps to the 180-degree maximum
+# uniform-curvature equilibrium.
 # This is a torque-commanded controller, not raw open-loop body torque.
-MAX_ABS_TORQUE = 1.5
+MAX_ABS_TORQUE = 1.0
 MAX_TORQUE_SLEW_RATE = 2.0
-MAX_TOTAL_TORQUE_MODE_BEND_DEGREES = 270.0
+MAX_TOTAL_TORQUE_MODE_BEND_DEGREES = 180.0
 # Restore the stable 25 mm-interval mass-normalized drive gains.
 BEND_STIFFNESS = 6400
 BEND_DAMPING = 240
@@ -892,8 +892,8 @@ def main():
     )
     print(f"Torque limit      : +/-{MAX_ABS_TORQUE} N*m")
     print(
-        "Torque calibration: 0.1/0.5/1.0/1.5 N*m -> "
-        "approximately 18/90/180/270 degrees"
+        "Torque calibration: 0.1/0.5/1.0 N*m -> "
+        "approximately 18/90/180 degrees (maximum)"
     )
     print(
         f"Target speed limit: {MAX_TARGET_SPEED_DEGREES_PER_SECOND} deg/s"

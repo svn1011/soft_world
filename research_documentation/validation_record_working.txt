@@ -250,3 +250,23 @@ Rescaled four-point Isaac regression:
 Every run also reported identical first-step X/Y drive targets on all five
 physical intervals. The prior small-number interface remains in this file only
 as historical validation evidence.
+
+2026-09-24 - Active maximum bend reduced to 180 degrees
+--------------------------------------------------------
+The active hybrid-controller torque range is now capped at +/-1.0 N*m, and the
+maximum torque-mode equilibrium bend is 180 degrees. The retained mapping is
+0.1/0.5/1.0 N*m -> 18/90/180 degrees. Commands with larger magnitude are
+clipped to +/-1.0 N*m before reaching the loader. The earlier 1.5 N*m,
+270-degree result above is historical pre-cap evidence and is no longer an
+accepted working command. The regression verifier was updated to validate the
+clipped applied torque as well as the resulting bend.
+
+Over-limit Isaac regression:
+- Requested torque: 1.5 N*m
+- Applied torque after controller clamp: 1.0 N*m
+- Expected phi: 180.0000 degrees
+- Measured final-second phi: 179.9999--179.9999 degrees
+- Tracking error: 0.0001 degrees
+- Five interval bends: approximately 36 degrees each
+- First-step X/Y targets: [0.0, 0.125] degrees on all five intervals
+- VERIFY RESULT: PASS

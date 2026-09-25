@@ -35,9 +35,10 @@ The working loader now converts identified legacy position targets to the
 five-interval configuration. An end-to-end headless test using the original
 controller measured 179.9996\degrees{} at the sixth disc. These results establish
 a bounded software regression result, not physical material validation or
-general constant-curvature accuracy. The torque-admittance range was subsequently
-extended and verified at 270.0000\degrees{} using accumulated inter-disc bend
-measurement. Large-angle diagonal orientation errors,
+general constant-curvature accuracy. A prior development configuration verified
+a 270.0000\degrees{} torque-admittance result using accumulated inter-disc bend
+measurement; the active working configuration is now intentionally limited to
+180\degrees{}. Large-angle diagonal orientation errors,
 sensor-model assumptions, and the absence of physical torque calibration
 remain explicitly identified limitations.
 \end{abstract}
@@ -382,7 +383,7 @@ bending-plane direction $\Theta$. The current loader implements a calibrated
 quasi-static admittance law,
 \begin{equation}
 \Phi_{\mathrm{eq}}=180\degrees\frac{\tau_c}{1.0~\mathrm{N\,m}},
-\qquad |\tau_c|\leq1.5~\mathrm{N\,m}.
+\qquad |\tau_c|\leq1.0~\mathrm{N\,m}.
 \end{equation}
 The resulting equilibrium angle is distributed exactly as in position mode:
 one fifth at each direct disc-to-disc runtime joint. The ROS compatibility
@@ -392,8 +393,8 @@ acceleration drives then enforce the requested uniform-curvature equilibrium.
 Torque command slew is limited to 2.0~N\,m/s.
 
 The command scale was increased by a factor of 100 from the earlier
-0.010~N\,m-per-180\degrees{} mapping. The current 0--1.5~N\,m range is
-approximately 0--15.3~kgf\,cm and is therefore easier to compare with compact
+0.010~N\,m-per-180\degrees{} mapping. The current 0--1.0~N\,m range is
+approximately 0--10.2~kgf\,cm and is therefore easier to compare with compact
 actuator ratings. This rescaling changes only the admittance interface and not
 the simulated equilibrium motion; it is not an experimentally identified
 moment--curvature law or a claim that a physical limb requires this torque.
@@ -407,21 +408,25 @@ trial also concentrated curvature toward distal intervals. Those approaches
 were rejected because they did not reproduce the required constant-curvature
 shape.
 
-The rescaled direct-topology bounded tests measured 18.0000\degrees{},
-90.0000\degrees{}, 179.9999\degrees{}, and 270.0000\degrees{} at 0.1,
-0.5, 1.0, and 1.5~N\,m. All five interval rotations were respectively
-approximately 3.6\degrees{}, 18\degrees{}, 36\degrees{}, and 54\degrees{}.
+The active rescaled direct-topology bounded tests measured 18.0000\degrees{},
+90.0000\degrees{}, and 179.9999\degrees{} at 0.1, 0.5, and 1.0~N\,m. All five
+interval rotations were respectively approximately 3.6\degrees{},
+18\degrees{}, and 36\degrees{}.
 Negative torque produces the opposite signed target. These values verify the
 implemented software mapping; they must not be interpreted as hardware torque
-characterization.
+characterization. An explicit over-limit regression requested 1.5~N\,m; the
+controller applied 1.0~N\,m and measured 179.9999\degrees{}, with
+0.0001\degrees{} mapping error and approximately 36\degrees{} at every
+interval. This confirms the active 180\degrees{} cap in the tested path.
 
 The prior serial A/B topology reached only approximately 262.3\degrees{} for a
 270\degrees{} request and stopped near 52\degrees{} per later disc interval.
 Collision filtering, increased drive gains, and asymmetric A/B targets did not
 remove this ceiling and were not retained. Replacing each runtime serial pair
-with one direct disc-to-disc D6 joint produced 270.0000\degrees{}, with all five
-intervals at approximately 54.0000\degrees{}. A 360\degrees{} working range is
-not claimed.
+with one direct disc-to-disc D6 joint produced a historical 270.0000\degrees{}
+result, with all five intervals at approximately 54.0000\degrees{}. That
+development result is retained as historical evidence; the active command is
+clamped to 1.0~N\,m and 180\degrees{}.
 
 While a nonzero torque command is active, incoming bend-position callbacks are
 ignored, preventing a stale 20~Hz position publisher from zeroing the torque
@@ -709,7 +714,8 @@ Legacy controller with adapter, same target & 179.9996\degrees{} & 0.0004\degree
 Torque admittance, 0.1~N\,m & 18.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
 Torque admittance, 0.5~N\,m & 90.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
 Torque admittance, 1.0~N\,m & 179.9999\degrees{} & 0.0001\degrees{} mapping error & PASS\\
-Torque admittance, 1.5~N\,m & 270.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
+Active cap, 1.5~N\,m requested & 179.9999\degrees{} & Applied 1.0~N\,m & PASS\\
+Historical pre-cap torque trial, 1.5~N\,m & 270.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
 Large diagonal, 180\degrees{}, theta=45\degrees{} & About 178.93\degrees{} & About 10.25\degrees{} & Limitation\\
 User observation before compatibility fix & 81.8181568\degrees{} & Not recorded & Mismatch\\
 \bottomrule
@@ -754,8 +760,8 @@ Stale/duplicate controllers and nonstandard remappings remain operational risks.
 \item Two sensor rings cannot uniquely recover arbitrary distributed curvature,
 torsion, axial stretch, or full shape without additional assumptions.
 \item The current direct-topology torque-admittance law has been verified only
-for unloaded, single-axis simulation. The rescaled interface spans 0.1 to
-1.5~N\,m through 270\degrees{}. It is not raw torque
+for unloaded, single-axis simulation. The active rescaled interface spans 0.1
+to 1.0~N\,m through a maximum of 180\degrees{}. It is not raw torque
 control, a material constitutive model, or a hardware calibration; negative
 commands, payloads, disturbances, and arbitrary bending directions require
 separate validation. The quadruped and two-physical-limb backup were not part
@@ -879,8 +885,9 @@ and calibrated torque-admittance interfaces, six pose-derived strain channels, l
 graphs, and sensor-driven RViz reconstruction. The confirmed eleven-versus-five
 normalization failure was corrected in the loader and reproduced in a
 successful legacy-controller regression. The latest reported 180.0001\degrees{}
-position result and 270.0000\degrees{} torque-admittance endpoint are specific
-software verification results. Physical
+position result and 179.9999\degrees{} active torque-admittance endpoint are
+specific software verification results; the earlier 270.0000\degrees{} result
+is retained only as a pre-cap development record. Physical
 strain validity, exact inextensible constant-curvature geometry, arbitrary
 bending-direction accuracy, and hardware applicability remain open research
 tasks rather than established conclusions.
