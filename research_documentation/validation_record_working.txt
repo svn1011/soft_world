@@ -184,3 +184,69 @@ Rounded constant phi is not proof of mathematically zero oscillation.
 Only A split array is printed; both A/B arrays are checked before simulation.
 No physical strain calibration, statistical confidence interval, or complete
 graphical-launch validation is established by these excerpts.
+2026-09-24 - Full-launch sensor-publication regression
+------------------------------------------------------
+The graphical Isaac Sim launch exited after initialization because the sensor
+publisher referenced station_orientation without assigning it. Restored the
+base-to-station relative-quaternion calculation before publishing each station
+orientation. The bend verifier now also invokes publish_sensor_readings(), so
+pose, strain, bridge-voltage, and station-orientation publication errors are
+covered by the automated simulation check.
+
+The corrected installed loader subsequently remained active through a
+35-second headless full-entry-point test. The timeout exposed a separate
+shutdown race in which a final sensor message could be published after the ROS
+context was invalidated. The main loop now checks rclpy.ok() at entry and again
+after rendering, and shutdown is requested only for a still-valid context.
+A repeated 20-second installed-loader test loaded the six-disc USD, entered the
+simulation loop, published sensor data, and terminated at the intentional
+timeout without a Python traceback. The expanded verifier also passed at
+0.005 N*m: expected phi 90.0000 degrees, measured range
+90.0000--90.0000 degrees, tracking error 0.0000 degrees.
+2026-09-24 - Synchronized whole-limb bending transient
+------------------------------------------------------
+The four non-base physical intervals each combine compatibility commands A and
+B on one direct runtime joint. Both halves were previously slew-limited at the
+full 20 deg/s, so their sum changed at 40 deg/s while the base interval changed
+at 20 deg/s. This created a nonuniform, visibly segment-wise transient even
+though the final equilibrium was uniform. Each A/B half is now limited to
+10 deg/s, making all five physical interval targets advance together at
+20 deg/s. The Isaac verifier now fails if the five transient X/Y drive targets
+differ after the first controller update.
+
+2026-09-24 - Moderate synchronized speed increase
+--------------------------------------------------
+The effective physical-interval target slew rate was increased from 20 deg/s
+to 30 deg/s. Each A/B compatibility half now advances at 15 deg/s, so its
+vector sum remains synchronized with the base interval at 30 deg/s. This is a
+50 percent transition-speed increase without returning to the earlier
+two-to-one rate mismatch.
+An eight-second Isaac regression at a 180-degree position request reported
+identical first-step physical targets [0.0, 0.125] degrees on all five joints,
+a final measured range of 179.9999--179.9999 degrees, and interval bends of
+approximately 36 degrees each. VERIFY RESULT: PASS.
+2026-09-24 - Bridge graph visibility above 1 V
+------------------------------------------------
+The voltage trace disappeared when extreme compression made the ideal active
+gauge resistance nonpositive and bridge_model_working.py correctly published
+NaN. Matplotlib breaks lines at NaN. The voltage plot now renders non-finite
+samples at a dashed +1.25 V display boundary with a warning, while preserving
+NaN on ROS and false bridge_valid status. Voltage-axis minimum padding was
+reduced from 1.0 V to 0.02 V so finite changes above 1 V remain visible.
+2026-09-24 - Actuator-scale torque-command interface
+----------------------------------------------------
+The calibrated admittance command was rescaled by 100: 0.1/0.5/1.0/1.5 N*m
+now request 18/90/180/270 degrees, with a +/-1.5 N*m software limit and
+2.0 N*m/s slew limit. This preserves the same simulated equilibrium behavior
+while expressing the input over approximately 0--15.3 kgf*cm. It does not
+convert the controller to raw torque or validate a physical actuator/material
+moment-curvature relationship. Rescaled Isaac regressions are pending below.
+
+Rescaled four-point Isaac regression:
+- 0.1 N*m: 18.0000 degrees; intervals approximately 3.6 degrees; PASS
+- 0.5 N*m: 90.0000 degrees; intervals approximately 18 degrees; PASS
+- 1.0 N*m: 179.9999 degrees; intervals approximately 36 degrees; PASS
+- 1.5 N*m: 270.0000 degrees; intervals approximately 54 degrees; PASS
+Every run also reported identical first-step X/Y drive targets on all five
+physical intervals. The prior small-number interface remains in this file only
+as historical validation evidence.

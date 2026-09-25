@@ -222,8 +222,12 @@ python3 scripts/control_soft_limb_working.py --ros-args \
 The total bend is distributed over 5 disc intervals. Each dual-D6 A/B joint
 receives half of its interval angle. The requested angle stays as the PhysX
 drive target while the acceleration drive generates mass-dependent corrective
-torque from position and velocity error. Targets ramp at no more than 20°/s to
-avoid exciting flexible modes. Change parameters while running with:
+torque from position and velocity error. Targets ramp at no more than 30°/s to
+avoid exciting flexible modes. Because each later physical joint combines its
+A and B compatibility commands, each half ramps at 15°/s; their sum therefore
+matches the base joint's 30°/s rate. All five physical intervals consequently
+advance together instead of bending segment by segment. Change parameters
+while running with:
 
 ```bash
 ros2 param set /soft_limb_position_controller phi_position 15.0
@@ -234,9 +238,9 @@ Run only one soft-limb controller at a time.
 
 The current position source default is `phi_position=90.0` and
 `theta_position=0.0`. Supplying explicit command-line parameters is therefore
-recommended. The hybrid script's current source request is `10.0 N·m`, which
-is clipped to the 0.015 N·m working limit; pass `phi_torque` explicitly for a
-reproducible experiment.
+recommended. The hybrid script defaults to `0.0 N·m`, so it does not actuate
+the limb automatically; pass `phi_torque` explicitly for a reproducible
+experiment.
 
 The position controller accepts total phi up to ±180°. At 180° the five
 intervals each receive 36°: the base D6 receives 36°, and each later serial
@@ -262,7 +266,7 @@ cd "$SOFT_WORLD_WS"
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 python3 scripts/control_soft_limb_hybrid_working.py --ros-args \
-  -p phi_torque:=0.001 \
+  -p phi_torque:=0.5 \
   -p theta_position:=90.0
 ```
 
@@ -274,14 +278,17 @@ controller. It accepts torque in N·m and maps the requested quasi-static
 equilibrium bend linearly:
 
 ```text
-total phi = 180 degrees * torque / 0.010 N*m
+total phi = 180 degrees * torque / 1.0 N*m
 ```
 
-Consequently, 0.001, 0.005, 0.010, and 0.015 N·m request approximately 18°,
-90°, 180°, and 270°. Negative torque reverses the bend. The command is
-clamped to ±0.015 N·m. Bounded headless tests measured 18.0000°, 90.0000°,
-180.0001°, and 270.0000° at those four commands, with equal bend at all five
-disc intervals.
+Consequently, 0.1, 0.5, 1.0, and 1.5 N·m request approximately 18°, 90°,
+180°, and 270°. Negative torque reverses the bend. The command is clamped to
+±1.5 N·m. This is a 100× rescaling of the command interface; the simulated
+equilibrium behavior is unchanged. The range corresponds to approximately
+0--15.3 kgf·cm and is easier to compare with compact actuator ratings, but it
+is not a measured torque requirement for the physical limb.
+Headless Isaac regressions measured 18.0000°, 90.0000°, 179.9999°, and
+270.0000° at those four commands, with equal bend across all five intervals.
 
 Measured phi is now the sum of the local bend vectors between adjacent discs.
 A single base-to-tip quaternion uses the shortest rotation and would fold
@@ -429,6 +436,15 @@ convention must be retained or changed consistently in hardware and ROS. A
 second six-graph window opens with output volts. It plots the ideal circuit
 value even when the reading is invalid; inspect the `bridge_valid` topic before
 interpreting a value as hardware-feasible.
+
+At compressive strain of $-50\%$, the ideal active-gauge resistance reaches
+zero and the ROS bridge-voltage topic becomes `NaN`; this is intentionally not
+presented as a valid electrical measurement. To prevent Matplotlib from making
+the trace disappear, the voltage graph alone displays non-finite samples at
+the dashed +1.25 V (`Vexc/2`) invalid-model boundary and logs a warning. The
+underlying ROS value remains `NaN`, and `bridge_valid` remains false. Voltage
+plots use 0.02 V minimum padding instead of the strain plot's 1.0-unit padding,
+so finite changes between 1.0 and 1.25 V remain visible.
 
 `bridge_valid=1.0` currently requires both `abs(epsilon) <= 3%` and
 `abs(Vout/Vexc) <= 25 mV/V`. These are deliberately conservative nominal foil

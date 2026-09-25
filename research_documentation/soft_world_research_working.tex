@@ -317,10 +317,10 @@ Linear / angular body damping & 2.0 / 10.0\\
 Physics frequency & 240~Hz\\
 Position / velocity solver iterations & 32 / 8\\
 Controller publishing frequency & 20~Hz\\
-Compatibility half-target slew limit & 20\degrees{}/s\\
-Effective direct-interval slew limit & 40\degrees{}/s\\
-Torque magnitude limit & 0.015~N\,m (software bound)\\
-Torque slew limit & 0.020~N\,m/s (software bound)\\
+Compatibility half-target slew limit & 15\degrees{}/s\\
+Effective direct-interval slew limit & 30\degrees{}/s\\
+Torque magnitude limit & 1.5~N\,m (software bound)\\
+Torque slew limit & 2.0~N\,m/s (software bound)\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -381,15 +381,22 @@ The hybrid script publishes a scalar bending-torque command $\tau_c$ and a
 bending-plane direction $\Theta$. The current loader implements a calibrated
 quasi-static admittance law,
 \begin{equation}
-\Phi_{\mathrm{eq}}=180\degrees\frac{\tau_c}{0.010~\mathrm{N\,m}},
-\qquad |\tau_c|\leq0.015~\mathrm{N\,m}.
+\Phi_{\mathrm{eq}}=180\degrees\frac{\tau_c}{1.0~\mathrm{N\,m}},
+\qquad |\tau_c|\leq1.5~\mathrm{N\,m}.
 \end{equation}
 The resulting equilibrium angle is distributed exactly as in position mode:
 one fifth at each direct disc-to-disc runtime joint. The ROS compatibility
 arrays still carry one tenth on both A and B topics, and the loader vector-sums
 the two halves into the full direct-interval target. The same strong
 acceleration drives then enforce the requested uniform-curvature equilibrium.
-Torque command slew is limited to 0.020~N\,m/s.
+Torque command slew is limited to 2.0~N\,m/s.
+
+The command scale was increased by a factor of 100 from the earlier
+0.010~N\,m-per-180\degrees{} mapping. The current 0--1.5~N\,m range is
+approximately 0--15.3~kgf\,cm and is therefore easier to compare with compact
+actuator ratings. This rescaling changes only the admittance interface and not
+the simulated equilibrium motion; it is not an experimentally identified
+moment--curvature law or a claim that a physical limb requires this torque.
 
 This is a \emph{torque-commanded admittance controller}, not raw open-loop
 body-torque actuation and not a measured physical constitutive law. Earlier
@@ -400,9 +407,9 @@ trial also concentrated curvature toward distal intervals. Those approaches
 were rejected because they did not reproduce the required constant-curvature
 shape.
 
-The latest direct-topology bounded tests measured 18.0000\degrees{},
-90.0000\degrees{}, 180.0001\degrees{}, and 270.0000\degrees{} at 0.001,
-0.005, 0.010, and 0.015~N\,m. All five interval rotations were respectively
+The rescaled direct-topology bounded tests measured 18.0000\degrees{},
+90.0000\degrees{}, 179.9999\degrees{}, and 270.0000\degrees{} at 0.1,
+0.5, 1.0, and 1.5~N\,m. All five interval rotations were respectively
 approximately 3.6\degrees{}, 18\degrees{}, 36\degrees{}, and 54\degrees{}.
 Negative torque produces the opposite signed target. These values verify the
 implemented software mapping; they must not be interpreted as hardware torque
@@ -537,6 +544,14 @@ high-bend strains often exceed the 3\% flag. Consequently, this layer provides
 a traceable voltage-interface hypothesis, not a validated selection of a real
 gauge or a demonstration that a foil gauge can survive direct mounting.
 
+Matplotlib normally breaks a trace at a NaN sample. For visualization only,
+the working voltage plot maps these non-finite samples to a dashed
+$+V_{\mathrm{exc}}/2=+1.25$~V invalid-model boundary and emits a warning. The
+published ROS value remains NaN and the validity flag remains false, avoiding
+the false claim that the boundary is a feasible measurement. The voltage plot
+uses 0.02~V minimum vertical padding, rather than the strain plot's 1.0-unit
+padding, so finite changes from 1.0 to 1.25~V remain discernible.
+
 \section{Sensor-driven reconstruction and RViz}
 Each ring supplies three strain values. Inverting Equation~\eqref{eq:strain}
 uses the matrix
@@ -616,7 +631,43 @@ simulation timestamp. Plot histories are not automatically exported as a
 research dataset. Timestamp alignment, recording, and replay need to be added
 or managed through a documented logging workflow.
 
+The station orientation topics publish each instrumented disc's quaternion
+relative to the base. During the September~24, 2026 full-launch regression,
+Isaac Sim initialized but the loader then exited because this relative
+quaternion was referenced before assignment in the sensor-publication path.
+The assignment was restored, and the headless verification harness was
+extended to execute the complete pose, strain, bridge-voltage, and station
+orientation publication path so this class of launch-only error is detected.
+The corrected installed loader then remained active for a 35~s headless
+full-entry-point test. That test also exposed a shutdown-only race: a signal
+could invalidate the ROS context during rendering before the next sensor
+publication. The loop now checks ROS context validity at entry and immediately
+before publishing, preventing this misleading termination traceback.
+A repeated 20~s test of the rebuilt installed loader reached the simulation
+loop and ended at the intentional timeout without a Python traceback. The
+expanded sensor-publication verifier also passed at 0.005~N\,m, with an
+expected bend of 90.0000\degrees{}, measured final-second range of
+90.0000--90.0000\degrees{}, and reported tracking error of 0.0000\degrees{}.
+
 \section{Recorded preliminary verification}\label{sec:validation}
+The direct runtime topology requires special treatment during command
+interpolation. The base interval receives one command, whereas each of the
+other four physical intervals receives the vector sum of compatibility
+commands A and B. Slewing both halves at the full 20\degrees{}/s produced a
+40\degrees{}/s physical target away from the base and only 20\degrees{}/s at
+the base. Although the final equilibrium remained uniform, this caused a
+visibly segment-wise transient. Each compatibility half is now limited to
+10\degrees{}/s, so all five physical interval targets initially advanced
+together at 20\degrees{}/s. The synchronized rate was subsequently increased
+to 30\degrees{}/s by using 15\degrees{}/s for each compatibility half. This
+preserves the commanded constant-curvature distribution during the bend while
+reducing transition time. The verification harness explicitly compares all
+five X/Y drive targets after the first update.
+An eight-second 180\degrees{} Isaac regression at the 30\degrees{}/s setting
+reported identical first-step targets $[0.0,0.125]$ degrees on all five direct
+joints, a final measured range of 179.9999--179.9999\degrees{}, and
+approximately 36\degrees{} at every interval (PASS).
+
 \subsection{Method and metrics}
 The headless harness opens the hanging six-disc asset, validates topology,
 applies the working drive/solver configuration, and receives commands through
@@ -624,6 +675,8 @@ the actual ROS position controller. Its default run is 12~s of simulated
 time at 240~Hz (2880 physics steps); it measures the last simulated second.
 It does not start the complete RViz/plotter launch. Thus it is an end-to-end
 command-to-physics test, not a full graphical-launch validation.
+It now exercises the complete sensor-publication method, although it still
+does not validate the RViz and Matplotlib graphical processes themselves.
 
 For position tests through 180\degrees{}, the target tip quaternion is
 constructed from axis $\mathbf{a}(\Theta)$ and angle $\Phi_c$. Full orientation
@@ -653,10 +706,10 @@ on exit status alone.
 Case & Final phi & Full tip error & Status\\\midrule
 Working controller, 180\degrees{}, theta=0 & 180.0001\degrees{} & 0.0001\degrees{} & PASS\\
 Legacy controller with adapter, same target & 179.9996\degrees{} & 0.0004\degrees{} & PASS\\
-Torque admittance, 0.001~N\,m & 18.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
-Torque admittance, 0.005~N\,m & 90.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
-Torque admittance, 0.010~N\,m & 180.0001\degrees{} & 0.0001\degrees{} mapping error & PASS\\
-Torque admittance, 0.015~N\,m & 270.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
+Torque admittance, 0.1~N\,m & 18.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
+Torque admittance, 0.5~N\,m & 90.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
+Torque admittance, 1.0~N\,m & 179.9999\degrees{} & 0.0001\degrees{} mapping error & PASS\\
+Torque admittance, 1.5~N\,m & 270.0000\degrees{} & 0.0000\degrees{} mapping error & PASS\\
 Large diagonal, 180\degrees{}, theta=45\degrees{} & About 178.93\degrees{} & About 10.25\degrees{} & Limitation\\
 User observation before compatibility fix & 81.8181568\degrees{} & Not recorded & Mismatch\\
 \bottomrule
@@ -701,8 +754,8 @@ Stale/duplicate controllers and nonstandard remappings remain operational risks.
 \item Two sensor rings cannot uniquely recover arbitrary distributed curvature,
 torsion, axial stretch, or full shape without additional assumptions.
 \item The current direct-topology torque-admittance law has been verified only
-for unloaded, single-axis simulation at four positive commands from 0.001 to
-0.015~N\,m through 270\degrees{}. It is not raw torque
+for unloaded, single-axis simulation. The rescaled interface spans 0.1 to
+1.5~N\,m through 270\degrees{}. It is not raw torque
 control, a material constitutive model, or a hardware calibration; negative
 commands, payloads, disturbances, and arbitrary bending directions require
 separate validation. The quadruped and two-physical-limb backup were not part

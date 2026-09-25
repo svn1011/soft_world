@@ -118,6 +118,35 @@ def main():
         disk_forces[:, 2] = limb.DISK_MASS * limb.GRAVITY_ACCELERATION
         link_forces[:, 2] = limb.VIRTUAL_LINK_MASS * limb.GRAVITY_ACCELERATION
         interface = limb.get_physx_interface()
+        # One controller update must give every physical bend interval the
+        # same transient target. This guards against ramping compatibility
+        # commands A and B at full speed and then doubling their shared joint.
+        node.update_drive_targets(1.0 / limb.PHYSICS_FREQUENCY_HZ)
+        transient_targets = []
+        for joint_path in limb.joint_paths():
+            joint_prim = world.stage.GetPrimAtPath(joint_path)
+            transient_targets.append([
+                limb.UsdPhysics.DriveAPI(
+                    joint_prim, "rotX"
+                ).GetTargetPositionAttr().Get(),
+                limb.UsdPhysics.DriveAPI(
+                    joint_prim, "rotY"
+                ).GetTargetPositionAttr().Get(),
+            ])
+        if not np.allclose(
+            transient_targets,
+            np.repeat([transient_targets[0]], limb.JOINT_COUNT, axis=0),
+            atol=1.0e-6,
+        ):
+            raise RuntimeError(
+                "Physical bend intervals do not share one synchronized "
+                f"curve target: {transient_targets}"
+            )
+        print(
+            "VERIFY synchronized transient targets: "
+            f"{transient_targets}",
+            flush=True,
+        )
         world.play()
         measurements = []
         steps = int(args.seconds * limb.PHYSICS_FREQUENCY_HZ)
@@ -141,6 +170,9 @@ def main():
                 bend = limb.accumulated_bend_vector(orientations)
                 measurements.append(float(np.rad2deg(np.linalg.norm(bend))))
         _, orientations = disks.get_world_poses()
+        # Exercise the same pose, strain, bridge-voltage, and station-orientation
+        # publication path used by the full simulator launch.
+        node.publish_sensor_readings(orientations)
         tip = limb.relative_quaternion(orientations[0], orientations[-1])
         if args.torque is None:
             half_angle = np.deg2rad(args.phi) * 0.5

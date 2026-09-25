@@ -3,6 +3,7 @@
 """Display six live strain-gauge histories from the working soft limb."""
 
 from collections import deque
+import math
 import os
 import time
 
@@ -20,6 +21,8 @@ from std_msgs.msg import Float64
 HISTORY_SECONDS = 20.0
 MAX_SAMPLES = 4000
 PLOT_REFRESH_HZ = 20.0
+BRIDGE_DISPLAY_BOUNDARY_VOLTS = 1.25
+BRIDGE_MINIMUM_AXIS_PADDING_VOLTS = 0.02
 PLOT_SIGNAL = os.environ.get("SOFT_LIMB_PLOT_SIGNAL", "strain")
 SIGNAL_LABELS = {
     "strain": ("Strain (µε)", "Soft Limb Strain Gauges"),
@@ -49,6 +52,7 @@ class StrainGaugePlotter(Node):
             )
             for station, gauge, _, _ in GAUGES
         }
+        self._nonfinite_bridge_warned = False
 
         for station, gauge, _, _ in GAUGES:
             topic = (
@@ -68,7 +72,21 @@ class StrainGaugePlotter(Node):
         """Append one time-stamped strain sample."""
         times, values = self.samples[key]
         times.append(time.monotonic() - self.start_time)
-        values.append(message.data)
+        value = message.data
+        if PLOT_SIGNAL == "bridge_voltage" and not math.isfinite(value):
+            # Preserve NaN on the ROS topic, where it correctly identifies an
+            # impossible nonpositive active-gauge resistance. For display only,
+            # continue the trace at the +Vexc/2 circuit boundary so the graph
+            # does not vanish and the invalid region remains visible.
+            value = BRIDGE_DISPLAY_BOUNDARY_VOLTS
+            if not self._nonfinite_bridge_warned:
+                self.get_logger().warning(
+                    "Non-finite bridge output is displayed at +1.25 V. "
+                    "This is an invalid-model boundary, not a valid reading; "
+                    "inspect the bridge_valid topics."
+                )
+                self._nonfinite_bridge_warned = True
+        values.append(value)
 
 
 def main(args=None):
@@ -90,6 +108,14 @@ def main(args=None):
         axis.grid(True, alpha=0.3)
         axis.set_xlim(0.0, HISTORY_SECONDS)
         axis.set_ylim(-1.0, 1.0)
+        if PLOT_SIGNAL == "bridge_voltage":
+            axis.axhline(
+                BRIDGE_DISPLAY_BOUNDARY_VOLTS,
+                color="black",
+                linestyle="--",
+                linewidth=0.8,
+                alpha=0.6,
+            )
 
     figure.tight_layout()
     plt.show(block=False)
@@ -116,7 +142,14 @@ def main(args=None):
                 if values:
                     minimum = min(values)
                     maximum = max(values)
-                    padding = max(1.0, 0.1 * (maximum - minimum))
+                    minimum_padding = (
+                        BRIDGE_MINIMUM_AXIS_PADDING_VOLTS
+                        if PLOT_SIGNAL == "bridge_voltage"
+                        else 1.0
+                    )
+                    padding = max(
+                        minimum_padding, 0.1 * (maximum - minimum)
+                    )
                     axis.set_ylim(minimum - padding, maximum + padding)
 
             figure.canvas.draw_idle()

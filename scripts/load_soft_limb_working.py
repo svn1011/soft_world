@@ -38,12 +38,12 @@ from bridge_model_working import (
 
 
 MAX_ABS_BEND_POSITION_DEGREES = 40.0
-MAX_TARGET_SPEED_DEGREES_PER_SECOND = 20.0
-# Calibrated admittance target: 0.010 N*m maps to 180 degrees and the full
-# 0.015 N*m working range maps to a 270-degree uniform-curvature equilibrium.
+MAX_TARGET_SPEED_DEGREES_PER_SECOND = 30.0
+# Actuator-scale admittance target: 1.0 N*m maps to 180 degrees and the full
+# 1.5 N*m working range maps to a 270-degree uniform-curvature equilibrium.
 # This is a torque-commanded controller, not raw open-loop body torque.
-MAX_ABS_TORQUE = 0.015
-MAX_TORQUE_SLEW_RATE = 0.020
+MAX_ABS_TORQUE = 1.5
+MAX_TORQUE_SLEW_RATE = 2.0
 MAX_TOTAL_TORQUE_MODE_BEND_DEGREES = 270.0
 # Restore the stable 25 mm-interval mass-normalized drive gains.
 BEND_STIFFNESS = 6400
@@ -516,8 +516,15 @@ class SoftLimbCommandSubscriber(Node):
                 )
             else:
                 target_bend = command[0]
+            # The base command maps to one physical joint. Every later
+            # physical joint is the vector sum of compatibility commands A
+            # and B, so each half must advance at half the physical-joint
+            # slew rate. Otherwise A+B moves at 40 deg/s while the base moves
+            # at 20 deg/s, producing a visibly segment-wise transient instead
+            # of one synchronized constant-curvature arc.
+            command_step = max_step if drive_index == 0 else 0.5 * max_step
             applied[0] += np.clip(
-                target_bend - applied[0], -max_step, max_step
+                target_bend - applied[0], -command_step, command_step
             )
             direction_delta = (
                 command[1] - applied[1] + 180.0
@@ -604,6 +611,9 @@ class SoftLimbCommandSubscriber(Node):
         for station_name, disk_index, angles, _ in SENSOR_STATIONS:
             publishers = self._sensor_publishers[station_name]
 
+            station_orientation = relative_quaternion(
+                base_orientation, disk_orientations[disk_index]
+            )
             station_rotation = accumulated_bend_vector(
                 disk_orientations[:disk_index + 1]
             )
@@ -882,7 +892,7 @@ def main():
     )
     print(f"Torque limit      : +/-{MAX_ABS_TORQUE} N*m")
     print(
-        "Torque calibration: 0.001/0.005/0.010/0.015 N*m -> "
+        "Torque calibration: 0.1/0.5/1.0/1.5 N*m -> "
         "approximately 18/90/180/270 degrees"
     )
     print(
@@ -924,7 +934,7 @@ def main():
     print("Twist (rotZ)      : locked")
     print("--------------------------------")
 
-    while simulation_app.is_running():
+    while simulation_app.is_running() and rclpy.ok():
         rclpy.spin_once(command_subscriber, timeout_sec=0.0)
         rclpy.spin_once(rviz_publisher, timeout_sec=0.0)
         if world.is_playing():
@@ -955,6 +965,10 @@ def main():
             world.step(render=False)
             physx_interface.update_transformations(False, True, True)
         world.render()
+        # A launch shutdown signal can invalidate the ROS context while Isaac
+        # is rendering. Do not attempt one final publish with that context.
+        if not rclpy.ok():
+            break
         # Pose-based sensing remains independent of position/torque commands
         # and also reports transforms changed manually in the simulator.
         _, sensed_disk_orientations = disks.get_world_poses()
@@ -965,7 +979,7 @@ def main():
 
     command_subscriber.destroy_node()
     rviz_publisher.destroy_node()
-    if started_rclpy:
+    if started_rclpy and rclpy.ok():
         rclpy.shutdown()
     simulation_app.close()
 
