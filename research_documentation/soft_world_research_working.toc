@@ -28,6 +28,7 @@
 \contentsline {subsection}{\numberline {14.3}USD generation, portability, and version control}{16}{subsection.14.3}%
 \contentsline {section}{\numberline {15}Recommended next research experiments}{16}{section.15}%
 \contentsline {section}{\numberline {16}Conclusion}{17}{section.16}%
-\contentsline {section}{\numberline {A}Active file map}{17}{appendix.A}%
+\contentsline {subsection}{\numberline {16.1}Research progress presentation}{17}{subsection.16.1}%
+\contentsline {section}{\numberline {A}Active file map}{18}{appendix.A}%
 \contentsline {section}{\numberline {B}Retained numerical excerpts}{18}{appendix.B}%
 \contentsline {section}{\numberline {C}Suggested experiment-record template}{19}{appendix.C}%

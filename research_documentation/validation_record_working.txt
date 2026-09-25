@@ -270,3 +270,12 @@ Over-limit Isaac regression:
 - Five interval bends: approximately 36 degrees each
 - First-step X/Y targets: [0.0, 0.125] degrees on all five intervals
 - VERIFY RESULT: PASS
+
+2026-09-24 - Research progress presentation
+--------------------------------------------
+Created an editable progress deck covering work completed after the successful
+single-module position-control milestone. Fresh evidence captured from the
+working system includes straight and 180-degree Isaac Sim views plus live
+six-channel strain and bridge-voltage graphs during 0, 0.5, and 1.0 N*m torque
+steps. The presentation distinguishes simulation/software verification from
+physical validation and includes the active 1.0 N*m / 180-degree cap.
