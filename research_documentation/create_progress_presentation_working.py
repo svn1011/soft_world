@@ -498,6 +498,70 @@ def build_deck(document, context):
               "use 180° as the active experimental boundary.",
               4.0, 14.25, 26.0, 1.45, 16, WHITE, True, align=1, fill=MAROON)
 
+    page = deck.new_slide("Third Objective: Three Modules in Series", "soft_3_working")
+    deck.image(page, ASSETS / "soft_3_working_snake_pose.png",
+               1.1, 2.35, 13.7, 13.7)
+    deck.text(page, "soft_3_working architecture", 15.7, 2.55, 14.8, 0.7,
+              19, MAROON, True)
+    deck.bullet_list(page, [
+        "Three serial six-disc modules: 18 physical discs",
+        "Five actuated intervals per module: 15 total",
+        "Two fixed connectors transmit pose between modules",
+        "The first disc is fixed in air; the chain hangs under gravity",
+        "Three independent φ-torque commands",
+        "Three independent θ bending directions",
+        "Same synchronized constant-curvature target inside every module",
+        "Source, launch, control, plotting, verification, and USD files use the soft_3_working name",
+    ], 15.7, 3.55, 15.8, 1.30, 13.2)
+    deck.text(page,
+              "Live Isaac Sim capture using the Grey Studio light rig; overlapping "
+              "discs reflect the commanded compound three-dimensional pose.",
+              15.8, 14.2, 15.2, 1.5, 11, MID)
+
+    page = deck.new_slide("Independent Three-Module Control: Verified", "validation")
+    deck.metric(page, "90.0047°", "Module 1: 0.50 N·m, θ = 0°",
+                1.2, 2.7, 9.8, MAROON)
+    deck.metric(page, "134.9999°", "Module 2: 0.75 N·m, θ = 90°",
+                11.7, 2.7, 9.8, TEAL)
+    deck.metric(page, "179.9999°", "Module 3: 1.00 N·m, θ = −90°",
+                22.2, 2.7, 9.8, GOLD)
+    deck.text(page, "12-second headless regression", 1.4, 6.05, 13.0, 0.7,
+              18, MAROON, True)
+    deck.bullet_list(page, [
+        "All five first-step interval targets matched within each module.",
+        "Final-second ranges: 0.0001642°, 0.0000568°, 0.0000713°.",
+        "Connector residual bends: 0.0000672° and 0.0000394°.",
+        "Detected all 18 gauge publishers.",
+        "Overall verifier result: PASS.",
+    ], 1.4, 7.15, 20.0, 1.55, 14.5)
+    deck.rectangle(page, 22.4, 6.1, 9.5, 8.2, WHITE, 0xD7D2CC, True)
+    deck.text(page, "Research boundary", 23.0, 6.7, 8.2, 0.6,
+              17, MAROON, True)
+    deck.text(page,
+              "This validates independent software commands, synchronized interval "
+              "targets, connector rigidity, and numerical stability. It does not "
+              "calibrate physical torque, material response, or payload capacity.",
+              23.0, 7.8, 8.1, 4.8, 13.2, DARK)
+
+    page = deck.new_slide("Eighteen-Channel Bridge-Voltage Instrumentation", "sensing")
+    deck.image(page, ASSETS / "soft_3_working_18_voltage.png",
+               0.9, 2.25, 24.9, 14.25)
+    deck.text(page, "Repeated sensing layout", 26.25, 2.55, 5.8, 0.75,
+              15.5, MAROON, True)
+    deck.bullet_list(page, [
+        "Six gauges per module",
+        "Two axial stations",
+        "Three gauges per ring",
+        "18 bridge-voltage channels",
+        "18 validity flags",
+        "Quarter bridge: 350 Ω, GF 2.0, 2.5 V excitation",
+        "All 18 voltage graphs open automatically with the simulation launch",
+        "Pose-derived readings remain available without a command",
+    ], 26.1, 3.6, 6.0, 1.34, 11.5)
+    deck.text(page,
+              "Live voltage graph captured from /soft_snake/module_N/sensors/... topics.",
+              26.2, 14.8, 5.8, 1.2, 10.5, MID)
+
     page = deck.new_slide("Next Research Steps", "forward plan")
     steps = [
         ("01", "Physical gauge selection", "Choose a commercial gauge, substrate, adhesive, and temperature compensation strategy."),
@@ -542,6 +606,8 @@ def main():
         ASSETS / "isaac_180deg_torque_working.png",
         ASSETS / "strain_six_channel_working.png",
         ASSETS / "bridge_voltage_six_channel_working.png",
+        ASSETS / "soft_3_working_snake_pose.png",
+        ASSETS / "soft_3_working_18_voltage.png",
     ]
     missing = [str(path) for path in required if not path.exists()]
     if missing:

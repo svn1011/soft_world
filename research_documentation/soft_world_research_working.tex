@@ -740,6 +740,55 @@ the original publisher also confirmed base 36\degrees{} and an algebraic
 total of 180\degrees{} across nine active drives. The ROS package rebuilt
 successfully after the correction.
 
+\section{Third objective: three-module hanging snake}
+The verified single-module design was extended into a serial hanging robot
+named \texttt{soft\_3\_working}. The configuration contains three six-disc
+modules (18 physical discs total), five actuated intervals per module
+(15 actuated intervals total), and two fixed inter-module connectors. The
+uppermost disc is kinematic, leaving the complete chain suspended under
+gravity. Each module receives its own bending-torque command $\tau_{c,j}$ and
+bending-plane direction $\theta_j$, for $j\in\{1,2,3\}$. The generator,
+loader, controller, plotter, verifier, launch, and USD filenames use
+the same shortened \texttt{soft\_3\_working} naming convention. The established
+\path{/soft_snake/module_N} ROS topic namespace is retained to avoid breaking
+recorded topic-based experiments. The existing active
+admittance law is applied independently,
+\begin{equation}
+  \phi_j=180\degrees{}\frac{\tau_{c,j}}{1.0~\mathrm{N\,m}},
+  \qquad |\tau_{c,j}|\leq1.0~\mathrm{N\,m},
+\end{equation}
+with $|\phi_j|\leq180\degrees{}$. Within each module, the total target is
+distributed uniformly over its five physical intervals and all five targets
+use the same slew rate. The connectors are not assigned a bend command, so
+they transmit the terminal pose of one module to the base of the next.
+
+The sensing layout is repeated locally on every module. One ring of three
+gauges lies at one-third module length at $0\degrees{}$, $120\degrees{}$, and
+$240\degrees{}$; a second ring lies at two-thirds length at $180\degrees{}$,
+$300\degrees{}$, and $60\degrees{}$. Thus the serial robot exposes 18 strain
+channels, 18 ideal quarter-bridge voltage channels, and 18 validity flags.
+The per-gauge namespace is
+\path{/soft_snake/module_N/sensors/<station>/gauge_G/<quantity>}.
+The presentation records the 18 bridge-voltage channels rather than repeating
+the strain plot. Simulator screenshots use Isaac Sim's \emph{Grey Studio}
+viewport light rig, which the working loader selects programmatically before
+the capture. The \texttt{soft\_3\_working} ROS launch now starts the live
+18-channel bridge-voltage plotter together with Isaac Sim; plotting begins as
+soon as sensor messages are available.
+
+A 12-second headless regression commanded
+$(\tau_{c,1},\tau_{c,2},\tau_{c,3})=(0.50,0.75,1.00)$~N\,m and
+$(\theta_1,\theta_2,\theta_3)=(0,90,-90)\degrees{}$. Measured module bends
+were 90.0047476\degrees{}, 134.9999084\degrees{}, and
+179.9998960\degrees{}, respectively. Corresponding absolute tracking errors
+were 0.0047476\degrees{}, 0.0000916\degrees{}, and 0.0001040\degrees{}.
+The final-second ranges were 0.0001642\degrees{}, 0.0000568\degrees{}, and
+0.0000713\degrees{}. Residual bends across the two fixed connectors were
+0.0000672\degrees{} and 0.0000394\degrees{}. All five first-step targets were
+synchronized within each module, 18 gauge publishers were detected, and the
+test returned \texttt{PASS}. These results validate the software realization,
+not physical torque or strain calibration.
+
 \section{Known limitations and rejected approaches}
 \begin{enumerate}
 \item Equation~\eqref{eq:drive} produces a substantial full-orientation error
@@ -880,9 +929,11 @@ limit shape observability, and whether geometry-aware actuation can reduce the
 large-angle diagonal error without sacrificing stable compliant motion.
 
 \section{Conclusion}
-The working platform now supports a six-disc hanging leader, separate position
-and calibrated torque-admittance interfaces, six pose-derived strain channels, live
-graphs, and sensor-driven RViz reconstruction. The confirmed eleven-versus-five
+The working platform supports a six-disc hanging leader, separate position
+and calibrated torque-admittance interfaces, six pose-derived strain channels,
+live graphs, and sensor-driven RViz reconstruction. It now also includes the
+\texttt{soft\_3\_working} serial hanging robot with three independently
+directed torque-admittance modules and 18 pose-derived gauges. The confirmed eleven-versus-five
 normalization failure was corrected in the loader and reproduced in a
 successful legacy-controller regression. The latest reported 180.0001\degrees{}
 position result and 179.9999\degrees{} active torque-admittance endpoint are
@@ -898,7 +949,8 @@ after the successful single-module position-control milestone. It includes
 fresh captures of the current Isaac Sim environment, live six-channel strain
 and bridge-voltage graphs collected while stepping the torque command through
 0, 0.5, and 1.0~N\,m, quantitative constant-curvature and 180\degrees{}-cap
-figures, the ROS/RViz data path, limitations, and proposed next experiments.
+figures, the ROS/RViz data path, the three-module snake architecture and its
+18-channel sensing/validation results, limitations, and proposed next experiments.
 The source presentation, PowerPoint export, PDF export, and captured assets are
 stored under \texttt{research\_documentation}; plotted sensor values are
 explicitly labeled as simulated and pose-derived rather than hardware-validated.
@@ -928,6 +980,19 @@ Repository-relative file & Role\\\midrule
 \endhead
 \path{launch/soft_world_working.launch.py} & Simulator, RViz, TF, description,
 and plots.\\
+\path{launch/soft_3_working.launch.py} & Three-module hanging
+snake launch.\\
+\path{scripts/load_soft_3_working.py} & Three-module physics,
+control consumption, measurements, and 18-gauge publication.\\
+\path{scripts/control_soft_3_working.py} & Three independent
+phi-torque and theta command pairs.\\
+\path{scripts/plot_soft_3_working.py} & Eighteen strain or bridge
+voltage graphs.\\
+\path{scripts/verify_soft_3_working.py} & Bounded three-module
+headless regression.\\
+\path{scripts/soft_3_working.py} & Generator for the serial
+hanging USD.\\
+\path{usd/soft_3_working.usd} & Active three-module hanging asset.\\
 \path{scripts/load_soft_limb_working.py} & Physics configuration, command
 consumption, sensing, torque application, and reconstruction.\\
 \path{scripts/control_soft_limb_working.py} & Five-interval position command.\\

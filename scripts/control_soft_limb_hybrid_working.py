@@ -5,7 +5,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
-from limb_configuration_working import JOINT_COUNT
+from limb_configuration_working import JOINT_COUNTf
 
 
 PUBLISH_RATE_HZ = 20.0

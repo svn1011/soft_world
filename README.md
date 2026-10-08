@@ -470,6 +470,99 @@ center when the measured curvature is constant. Arbitrary shapes between the
 two stations are still approximated because two measurement sections cannot
 uniquely determine every possible deformation along the limb.
 
+## Three-module hanging snake (`soft_3_working`)
+
+The next working configuration places three six-disc modules in series. It has
+18 physical discs, 15 actuated bending intervals, two rigid inter-module
+connectors, three independent phi-torque inputs, three independent theta
+directions, and 18 virtual strain gauges (six per module). The first disc is
+fixed in the air, so the complete chain hangs under gravity.
+
+Build and launch it from the extracted repository root:
+
+```bash
+cd "$SOFT_WORLD_WS"
+source /opt/ros/humble/setup.bash
+colcon build --packages-select soft_world
+source install/setup.bash
+export ISAAC_SIM_PATH="$HOME/isaacsim"
+ros2 launch soft_world soft_3_working.launch.py
+```
+
+This launch starts both Isaac Sim and the Matplotlib window containing all 18
+live bridge-voltage graphs. The plotter may appear before Isaac Sim finishes
+loading; its traces begin updating as soon as the simulator publishes sensor
+data. Do not start a second voltage plotter unless a separate window is
+intended.
+
+In a second sourced terminal, publish one torque and direction pair for each
+module. For example:
+
+```bash
+python3 scripts/control_soft_3_working.py --ros-args \
+  -p module_1_phi_torque:=0.50 -p module_1_theta_position:=0.0 \
+  -p module_2_phi_torque:=0.75 -p module_2_theta_position:=90.0 \
+  -p module_3_phi_torque:=1.00 -p module_3_theta_position:=-90.0
+```
+
+Each module uses the same active single-module mapping,
+`phi = 180 degrees * torque / 1.0 N*m`, with torque limited to plus or minus
+1.0 N*m and bend magnitude limited to 180 degrees per module. The five
+interval targets inside a module advance together. Theta selects its bending
+direction independently of the other two modules.
+
+Commands use these topic pairs:
+
+```text
+/soft_snake/module_1/phi_torque
+/soft_snake/module_1/theta_position
+/soft_snake/module_2/phi_torque
+/soft_snake/module_2/theta_position
+/soft_snake/module_3/phi_torque
+/soft_snake/module_3/theta_position
+```
+
+Measured module bend and direction are available under
+`/soft_snake/module_N/measured_tip/{phi,theta}`. Sensor topics use
+`/soft_snake/module_N/sensors/{one_third,two_thirds}/gauge_G/` followed by
+`strain`, `bridge_voltage`, or `bridge_valid`, where `N` and `G` are 1--3.
+This gives 18 channels for each reported sensor quantity.
+
+Open all 18 strain plots in another sourced terminal:
+
+```bash
+python3 scripts/plot_soft_3_working.py
+```
+
+To open an additional bridge-voltage plot window manually:
+
+```bash
+SOFT_SNAKE_PLOT_SIGNAL=bridge_voltage \
+  python3 scripts/plot_soft_3_working.py
+```
+
+The headless three-module regression can be repeated with:
+
+```bash
+"$ISAAC_SIM_PATH/python.sh" scripts/verify_soft_3_working.py \
+  --torques 0.5 0.75 1.0 --thetas 0 90 -90 --seconds 12
+```
+
+The verified run measured 90.0047, 134.9999, and 179.9999 degrees for the
+three modules, respectively, reported all 18 sensor publishers, and passed
+the synchronized-interval and rigid-connector checks. These are simulation
+results for the implemented admittance law, not hardware torque calibration.
+
+The generated asset is `usd/soft_3_working.usd`. Regenerate it only through
+Isaac Sim's Python environment:
+
+```bash
+"$ISAAC_SIM_PATH/python.sh" scripts/soft_3_working.py
+```
+
+The three-module loader selects Isaac Sim's **Grey Studio** viewport light rig
+and uses the same rig for documented simulation screenshots.
+
 ## In-simulation follower backup
 
 The earlier physical follower is preserved in:
@@ -607,6 +700,19 @@ python3 scripts/control_quadraped.py
   six-disc spacing, anchors, and limits using a USD-enabled interpreter.
 - `scripts/soft_limb_hang_working.py` and `scripts/soft_limb_working.py` — USD
   generators.
+- `usd/soft_3_working.usd` — active three-module hanging snake asset.
+- `launch/soft_3_working.launch.py` — three-module simulator
+  launch.
+- `scripts/load_soft_3_working.py` — three-module physics,
+  independent control, measured bends, and 18-sensor publication.
+- `scripts/control_soft_3_working.py` — three independent
+  phi-torque/theta command pairs.
+- `scripts/plot_soft_3_working.py` — 18 strain or bridge-voltage
+  plots.
+- `scripts/verify_soft_3_working.py` — bounded headless
+  three-module regression.
+- `scripts/soft_3_working.py` — `soft_3_working.usd`
+  generator.
 
 ### Backup files
 

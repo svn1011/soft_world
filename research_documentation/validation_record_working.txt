@@ -184,6 +184,55 @@ Rounded constant phi is not proof of mathematically zero oscillation.
 Only A split array is printed; both A/B arrays are checked before simulation.
 No physical strain calibration, statistical confidence interval, or complete
 graphical-launch validation is established by these excerpts.
+
+2026-09-24 - Three-module hanging snake regression (`soft_3_working`)
+------------------------------------------------------------------------
+Configuration: three serial six-disc modules, 18 physical discs, 15 actuated
+intervals, two fixed inter-module connectors, and 18 virtual gauges. Each
+module accepts an independent phi-torque and theta-direction command.
+
+Command:
+scripts/verify_soft_3_working.py --torques 0.5 0.75 1.0
+  --thetas 0 90 -90 --seconds 12
+
+Module 1: expected phi 90.0000 degrees; measured phi 90.0047476 degrees;
+measured theta 0.0011747 degrees; tracking error 0.0047476 degrees;
+final-second range 0.0001642 degrees; PASS.
+Module 2: expected phi 135.0000 degrees; measured phi 134.9999084 degrees;
+measured theta 89.9992367 degrees; tracking error 0.0000916 degrees;
+final-second range 0.0000568 degrees; PASS.
+Module 3: expected phi 180.0000 degrees; measured phi 179.9998960 degrees;
+measured theta -89.9999609 degrees; tracking error 0.0001040 degrees;
+final-second range 0.0000713 degrees; PASS.
+
+All five first-step interval targets were identical within each module.
+Fixed connector residual bends were 0.0000672 and 0.0000394 degrees.
+Detected sensor gauge publishers: 18.
+VERIFY RESULT: PASS
+
+Interpretation: this validates the implemented three-module simulation and
+software admittance mapping. It does not establish physical torque demand,
+material behavior, payload performance, or hardware strain calibration.
+
+2026-09-24 - Three-module presentation capture convention
+----------------------------------------------------------
+The three-module sensing slide uses the live 18-channel bridge-voltage graph,
+not the 18-channel strain graph. The Isaac Sim working loader explicitly
+selects the Grey Studio viewport light rig before simulation screenshots are
+captured. The presentation caption records this lighting condition.
+
+2026-09-24 - Automatic 18-channel voltage plotting
+--------------------------------------------------
+The soft_3_working launch now starts plot_soft_3_working.py with
+SOFT_SNAKE_PLOT_SIGNAL=bridge_voltage. SNAP, SNAP_LIBRARY_PATH, GTK_PATH, and
+GIO_MODULE_DIR are removed for the plotting child process, matching the stable
+GUI-launch environment. The plot window can start before Isaac Sim and begins
+updating when the 18 bridge-voltage topics become available.
+End-to-end launch check: one `ros2 launch soft_world soft_3_working.launch.py`
+command started the installed loader and installed plotter as separate child
+processes. X11 reported both `Isaac Sim Python 4.5.0` and
+`Soft Snake: 18 Bridge Voltages` windows. Ctrl+C ended both children cleanly.
+
 2026-09-24 - Full-launch sensor-publication regression
 ------------------------------------------------------
 The graphical Isaac Sim launch exited after initialization because the sensor
