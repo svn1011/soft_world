@@ -522,8 +522,9 @@ Commands use these topic pairs:
 /soft_snake/module_3/theta_position
 ```
 
-Measured module bend and direction are available under
-`/soft_snake/module_N/measured_tip/{phi,theta}`. Sensor topics use
+Measured module bend and direction are available as
+`/soft_snake/module_N/measured_phi` and
+`/soft_snake/module_N/measured_theta`. Sensor topics use
 `/soft_snake/module_N/sensors/{one_third,two_thirds}/gauge_G/` followed by
 `strain`, `bridge_voltage`, or `bridge_valid`, where `N` and `G` are 1--3.
 This gives 18 channels for each reported sensor quantity.
@@ -562,6 +563,55 @@ Isaac Sim's Python environment:
 
 The three-module loader selects Isaac Sim's **Grey Studio** viewport light rig
 and uses the same rig for documented simulation screenshots.
+
+### Collect torque/theta voltage data in Excel
+
+Keep the simulator launch running, but stop
+`control_soft_3_working.py` so two nodes do not publish competing commands.
+Then run the automated collector from a second sourced terminal:
+
+```bash
+cd "$SOFT_WORLD_WS"
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 scripts/collect_soft_3_working.py
+```
+
+The default `one_at_a_time` experiment records a zero-torque baseline followed
+by four torques (0.25, 0.50, 0.75, and 1.00 N m) at five theta directions
+(-90, -45, 0, 45, and 90 degrees) for each of the three modules. This is 61
+cases, approximately 4.1 minutes, and approximately 1,220 sample rows at 20 Hz.
+The exact case count, planned duration, progress, and destination are printed
+before and during collection. Commands return to zero when the run finishes or
+is interrupted with `Ctrl+C`.
+
+For a repeated-trial research dataset with a two-second measurement window:
+
+```bash
+python3 scripts/collect_soft_3_working.py \
+  --torques 0.25 0.50 0.75 1.00 \
+  --thetas -90 -45 0 45 90 \
+  --repetitions 3 \
+  --settle-seconds 3 \
+  --record-seconds 2 \
+  --sample-rate 20
+```
+
+That command plans 183 cases and approximately 7,320 time samples. Use
+`--sweep-mode all_same` to apply each torque/theta pair to all three modules at
+once instead of isolating one module. Use `--output path/name.xlsx` to choose a
+filename. Without it, the timestamped workbook is saved under
+`research_data_working/`.
+
+Each workbook contains `Metadata`, `Sensor_Map`, `Cases`, `Samples`, and
+`Sensor_Summary` sheets. Every raw row includes all three commanded torque/theta
+pairs, all three measured phi/theta pairs, all 18 bridge voltages, and all 18
+validity flags. The summary reports mean, standard deviation, minimum, maximum,
+and valid fraction for every sensor and case. The collector refuses to run
+beside the normal controller unless the deliberate
+`--allow-competing-controller` override is supplied. These voltages are still
+pose-derived simulation outputs from the ideal bridge model; an Excel export
+does not make them hardware-calibrated measurements.
 
 ## In-simulation follower backup
 
@@ -711,6 +761,10 @@ python3 scripts/control_quadraped.py
   plots.
 - `scripts/verify_soft_3_working.py` — bounded headless
   three-module regression.
+- `scripts/collect_soft_3_working.py` — configurable torque/theta sweep and
+  18-channel Excel data collection.
+- `scripts/xlsx_writer_working.py` — dependency-free XLSX workbook writer.
+- `scripts/test_xlsx_writer_working.py` — offline XLSX structure regression.
 - `scripts/soft_3_working.py` — `soft_3_working.usd`
   generator.
 

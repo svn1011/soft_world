@@ -776,6 +776,64 @@ the capture. The \texttt{soft\_3\_working} ROS launch now starts the live
 18-channel bridge-voltage plotter together with Isaac Sim; plotting begins as
 soon as sensor messages are available.
 
+\subsection{Automated voltage-dataset acquisition}
+A dedicated ROS~2 experiment node,
+\path{scripts/collect_soft_3_working.py}, now performs repeatable command sweeps
+and writes the synchronized results directly to an Excel-compatible workbook.
+The node publishes the three module torque commands and three bending-plane
+directions, subscribes to measured $\phi_j$ and $\theta_j$, and samples all 18
+individual bridge-voltage and validity topics. It waits until every sensor is
+fresh before beginning and rejects concurrent use of the ordinary
+\texttt{soft\_3\_working\_controller} by default, because two command
+publishers would make the independent variable ambiguous. On normal exit or
+keyboard interruption, all commands are returned to zero and the samples
+collected so far are saved.
+
+The default design includes a zero-command baseline and isolates one module at
+a time. For every module it evaluates
+$\tau_c\in\{0.25,0.50,0.75,1.00\}$~N\,m and
+$\theta\in\{-90,-45,0,45,90\}\degrees{}$, producing 61 cases. Each case is
+allowed to settle for 3~s and is then recorded for 1~s at 20~Hz, for a planned
+total of approximately 1,220 raw time samples in 4.1~min. Torque values,
+directions, repetitions, settling duration, recording duration, sample rate,
+and output path are command-line parameters. A three-repetition, 2~s recording
+protocol produces approximately 7,320 samples, while the optional
+\texttt{all\_same} sweep applies each command pair to all modules together.
+
+The workbook contains five sheets: \texttt{Metadata} records the protocol and
+model assumptions; \texttt{Sensor\_Map} identifies module, axial station,
+gauge, and circumferential angle; \texttt{Cases} records command and mean
+measured pose for each trial; \texttt{Samples} preserves synchronized raw
+time-series rows; and \texttt{Sensor\_Summary} reports count, mean, sample
+standard deviation, minimum, maximum, and valid fraction for every sensor and
+case. A small standard-library writer,
+\path{scripts/xlsx_writer_working.py}, creates the XLSX archive without adding
+a pandas, openpyxl, or xlsxwriter dependency. This is a simulation data
+acquisition mechanism: the stored voltages remain pose-derived predictions of
+the ideal quarter-bridge model, not calibrated physical measurements.
+
+A live smoke test collected a baseline and a 0.25~N\,m, $0\degrees{}$
+all-module case. All 18 voltage and validity channels became ready, 10 raw
+rows were saved, and the loaded case spanned approximately
+$-0.075827922$ to $+0.096603947$~V, compared with the zero-command baseline.
+The generated workbook passed ZIP/XML integrity checks and was opened and
+resaved by LibreOffice Calc. This verifies the software data path and workbook
+compatibility, not sensor-model accuracy.
+
+The full default sweep was executed on October~9, 2026 and retained as
+\path{research_data_working/soft_3_working_voltage_dataset_20261009_094852.xlsx}.
+All 61 planned cases completed and all 1,220 planned synchronized rows were
+written. Across 18 sensors this produced 21,960 validity observations, of which
+14,954 (68.0965\%) were inside the nominal bridge-model range and 7,006 were
+flagged invalid. There were 21,877 finite voltage cells; 83 cells reached the
+non-finite model boundary and were intentionally left blank while their
+validity flags were retained. The finite simulated values spanned
+$-0.430364539$ to $+1.249186333$~V. The XLSX archive passed integrity testing
+and LibreOffice Calc opened and resaved it. The substantial invalid fraction is
+itself an experimental result: it indicates that the present pose-derived
+strain/ideal-bridge assumptions exceed their stated nominal operating region
+for many commanded poses and must not be treated as validated hardware output.
+
 A 12-second headless regression commanded
 $(\tau_{c,1},\tau_{c,2},\tau_{c,3})=(0.50,0.75,1.00)$~N\,m and
 $(\theta_1,\theta_2,\theta_3)=(0,90,-90)\degrees{}$. Measured module bends
@@ -950,7 +1008,8 @@ fresh captures of the current Isaac Sim environment, live six-channel strain
 and bridge-voltage graphs collected while stepping the torque command through
 0, 0.5, and 1.0~N\,m, quantitative constant-curvature and 180\degrees{}-cap
 figures, the ROS/RViz data path, the three-module snake architecture and its
-18-channel sensing/validation results, limitations, and proposed next experiments.
+18-channel sensing/validation results, the automated torque--theta XLSX
+acquisition protocol, limitations, and proposed next experiments.
 The source presentation, PowerPoint export, PDF export, and captured assets are
 stored under \texttt{research\_documentation}; plotted sensor values are
 explicitly labeled as simulated and pose-derived rather than hardware-validated.
@@ -990,6 +1049,11 @@ phi-torque and theta command pairs.\\
 voltage graphs.\\
 \path{scripts/verify_soft_3_working.py} & Bounded three-module
 headless regression.\\
+\path{scripts/collect_soft_3_working.py} & Configurable command sweep and
+18-channel Excel data acquisition.\\
+\path{scripts/xlsx_writer_working.py} & Dependency-free XLSX writer.\\
+\path{scripts/test_xlsx_writer_working.py} & Offline workbook-format
+regression.\\
 \path{scripts/soft_3_working.py} & Generator for the serial
 hanging USD.\\
 \path{usd/soft_3_working.usd} & Active three-module hanging asset.\\

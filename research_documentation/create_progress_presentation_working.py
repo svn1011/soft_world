@@ -562,13 +562,41 @@ def build_deck(document, context):
               "Live voltage graph captured from /soft_snake/module_N/sensors/... topics.",
               26.2, 14.8, 5.8, 1.2, 10.5, MID)
 
+    page = deck.new_slide("Automated Torque–Theta Voltage Dataset", "data acquisition")
+    stages = [
+        ("COMMAND GRID", "4 torques × 5 θ directions\nfor each of 3 modules", MAROON),
+        ("SETTLE + SAMPLE", "3 s settling; 20 Hz\n18 voltages + pose", TEAL),
+        ("QUALITY FLAGS", "18 validity channels\ncontroller-conflict guard", GOLD),
+        ("EXCEL OUTPUT", "Raw rows + case and\nsensor summaries", GREEN),
+    ]
+    for index, (title, detail, color) in enumerate(stages):
+        x = 1.25 + index * 8.05
+        deck.rectangle(page, x, 3.0, 7.0, 4.0, WHITE, color, True)
+        deck.text(page, title, x + 0.35, 3.45, 6.3, 0.65,
+                  13.5, color, True, align=1)
+        deck.text(page, detail, x + 0.4, 4.55, 6.2, 1.65,
+                  12.2, DARK, align=1)
+        if index < len(stages) - 1:
+            deck.text(page, "→", x + 7.15, 4.25, 0.7, 0.8,
+                      25, MID, True, align=1)
+    deck.metric(page, "61", "default cases", 2.0, 8.3, 8.6, MAROON)
+    deck.metric(page, "1,220", "collected raw rows", 12.6, 8.3, 8.6, TEAL)
+    deck.metric(page, "7,320", "3 repeats × 2 s", 23.2, 8.3, 8.6, GOLD)
+    deck.bullet_list(page, [
+        "Workbook sheets: Metadata, Sensor_Map, Cases, Samples, Sensor_Summary.",
+        "Every raw row preserves three commands, three measured poses, 18 voltages, and 18 validity flags.",
+        "Full sweep completed: 61/61 cases and 1,220/1,220 synchronized rows.",
+        "68.10% of 21,960 validity observations were nominal; 83 non-finite voltages remain blank and flagged.",
+        "Voltage remains pose-derived simulation output; physical calibration is still required.",
+    ], 2.0, 12.1, 29.0, 1.05, 11.7)
+
     page = deck.new_slide("Next Research Steps", "forward plan")
     steps = [
         ("01", "Physical gauge selection", "Choose a commercial gauge, substrate, adhesive, and temperature compensation strategy."),
         ("02", "Bench calibration", "Measure real strain and bridge voltage against known curvature and loading."),
         ("03", "Independent shape validation", "Compare reconstructed curvature with motion capture or vision—not the same pose source."),
         ("04", "Loaded and directional trials", "Repeat across θ, negative torque, payloads, disturbances, and repeated cycles."),
-        ("05", "Uncertainty and statistics", "Report repeatability, hysteresis, drift, confidence intervals, and failure limits."),
+        ("05", "Uncertainty and statistics", "Use repeated XLSX sweeps to report repeatability, hysteresis, drift, confidence intervals, and failure limits."),
     ]
     for index, (number, title, detail) in enumerate(steps):
         y = 2.65 + index * 2.75
@@ -585,9 +613,9 @@ def build_deck(document, context):
     outcomes = [
         ("CONTROL", "Position + calibrated torque admittance"),
         ("SHAPE", "Synchronized five-interval constant-curvature target"),
-        ("SENSING", "Six pose-derived strain channels + bridge voltages"),
+        ("SENSING", "18 pose-derived strain channels + bridge voltages"),
         ("VISUALIZATION", "Isaac Sim + sensor-driven RViz reconstruction"),
-        ("EVIDENCE", "Automated tests and research documentation"),
+        ("EVIDENCE", "Automated tests, XLSX datasets, and research documentation"),
     ]
     for index, (heading, detail) in enumerate(outcomes):
         y = 5.0 + index * 2.05

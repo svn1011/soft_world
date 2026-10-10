@@ -233,6 +233,66 @@ command started the installed loader and installed plotter as separate child
 processes. X11 reported both `Isaac Sim Python 4.5.0` and
 `Soft Snake: 18 Bridge Voltages` windows. Ctrl+C ended both children cleanly.
 
+2026-10-08 - Automated 18-channel XLSX data acquisition
+--------------------------------------------------------
+Added scripts/collect_soft_3_working.py and the dependency-free
+scripts/xlsx_writer_working.py. The collector commands all three module
+torque/theta interfaces, records measured module phi/theta, all 18 individual
+bridge voltages, and all 18 bridge-valid flags, and creates Metadata,
+Sensor_Map, Cases, Samples, and Sensor_Summary workbook sheets. It rejects the
+ordinary soft_3_working controller by default to prevent competing publishers
+and returns all commands to zero before shutdown.
+
+Offline checks:
+  python3 -m py_compile scripts/collect_soft_3_working.py
+    scripts/xlsx_writer_working.py scripts/test_xlsx_writer_working.py
+  python3 scripts/test_xlsx_writer_working.py
+Result: one test passed. ZIP integrity and XML parsing passed for every
+generated workbook part. LibreOffice Calc opened and resaved the output using
+the Office Open XML filter.
+
+Live smoke-test command:
+  python3 scripts/collect_soft_3_working.py --torques 0.25 --thetas 0
+    --sweep-mode all_same --settle-seconds 0.5 --record-seconds 0.5
+    --sample-rate 10 --sensor-timeout 60
+    --output research_data_working/soft_3_working_voltage_smoke_test.xlsx
+
+Result: all 18 voltage and validity channels became ready; baseline plus one
+loaded case completed; exactly 5 rows per case and 10 synchronized sample rows
+were stored. Baseline
+voltages were numerically zero. The 0.25 N m, theta=0 degree all-module case
+spanned -0.075827922 to +0.096603947 V across its recorded channels. The
+workbook is retained as a software smoke-test artifact, not a physical sensor
+dataset or calibration result.
+
+2026-10-09 - Full default three-module voltage sweep
+-----------------------------------------------------
+Output:
+  research_data_working/
+    soft_3_working_voltage_dataset_20261009_094852.xlsx
+
+The one-at-a-time protocol completed all 61 planned cases: one zero-command
+baseline plus four torque magnitudes (0.25, 0.50, 0.75, and 1.00 N m) at five
+theta directions (-90, -45, 0, 45, and 90 degrees) for each of three modules.
+Exactly 20 synchronized rows were recorded per case, for 1,220 rows total.
+
+Workbook audit:
+  File size: 657,810 bytes
+  Cases: 61/61
+  Raw sample rows: 1,220/1,220
+  Sensor-time validity observations: 21,960
+  Valid observations: 14,954 (68.0965 percent)
+  Invalid observations: 7,006
+  Finite voltage cells: 21,877
+  Blank cells at non-finite model boundary: 83
+  Finite simulated range: -0.430364539 to +1.249186333 V
+
+The XLSX ZIP structure passed integrity testing, all workbook XML parsed, and
+LibreOffice Calc opened and resaved the file. Invalid flags are not discarded.
+This dataset characterizes the current simulation and exposes where its ideal
+bridge model exceeds the nominal range; it is not a hardware-calibrated voltage
+dataset.
+
 2026-09-24 - Full-launch sensor-publication regression
 ------------------------------------------------------
 The graphical Isaac Sim launch exited after initialization because the sensor

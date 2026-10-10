@@ -4,7 +4,8 @@
 record for the current working configuration. It covers development history,
 physics and geometry, constant-curvature reference equations, position/hybrid
 control, the 81.818° topology mismatch and correction, virtual strain sensing,
-RViz reconstruction, plots, validation evidence, limitations, and reproducibility.
+RViz reconstruction, plots, validation evidence, automated three-module
+voltage-to-Excel data collection, limitations, and reproducibility.
 
 Historical changes, recorded tests, and proposed experiments are distinguished.
 It is a technical draft, not a finished thesis or physical-validation claim.
@@ -25,8 +26,14 @@ upload the `.tex` file to Overleaf as the project's main document. No external
 figures, bibliography file, shell escape, or repository-specific absolute paths
 are needed to compile it. Overleaf compilation has not been tested here.
 
-No `pdflatex` or `tectonic` executable was available when this document was
-created, so a PDF was not generated and LaTeX compilation is not yet verified.
+The working repository includes a compiled PDF. Rebuild it after every research
+update so the PDF and TeX source do not diverge.
+
+The automated three-module datasets are written under
+`../research_data_working/`. The XLSX files contain raw synchronized samples,
+case summaries, the sensor map, and protocol metadata. Preserve the raw
+workbook and record any change to the simulated bridge model before comparing
+runs.
 
 `validation_record_working.txt` retains available numerical excerpts from
 earlier tests. It is not a complete raw dataset, a fresh experiment, or a

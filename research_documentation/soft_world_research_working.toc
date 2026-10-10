@@ -22,14 +22,15 @@
 \contentsline {section}{\numberline {12}Recorded preliminary verification}{13}{section.12}%
 \contentsline {subsection}{\numberline {12.1}Method and metrics}{13}{subsection.12.1}%
 \contentsline {section}{\numberline {13}Third objective: three-module hanging snake}{14}{section.13}%
-\contentsline {section}{\numberline {14}Known limitations and rejected approaches}{15}{section.14}%
+\contentsline {subsection}{\numberline {13.1}Automated voltage-dataset acquisition}{15}{subsection.13.1}%
+\contentsline {section}{\numberline {14}Known limitations and rejected approaches}{16}{section.14}%
 \contentsline {section}{\numberline {15}Reproducible operation and asset handling}{16}{section.15}%
 \contentsline {subsection}{\numberline {15.1}Environment}{16}{subsection.15.1}%
-\contentsline {subsection}{\numberline {15.2}RViz and safe operation}{16}{subsection.15.2}%
+\contentsline {subsection}{\numberline {15.2}RViz and safe operation}{17}{subsection.15.2}%
 \contentsline {subsection}{\numberline {15.3}USD generation, portability, and version control}{17}{subsection.15.3}%
-\contentsline {section}{\numberline {16}Recommended next research experiments}{17}{section.16}%
+\contentsline {section}{\numberline {16}Recommended next research experiments}{18}{section.16}%
 \contentsline {section}{\numberline {17}Conclusion}{18}{section.17}%
-\contentsline {subsection}{\numberline {17.1}Research progress presentation}{18}{subsection.17.1}%
-\contentsline {section}{\numberline {A}Active file map}{18}{appendix.A}%
-\contentsline {section}{\numberline {B}Retained numerical excerpts}{19}{appendix.B}%
-\contentsline {section}{\numberline {C}Suggested experiment-record template}{20}{appendix.C}%
+\contentsline {subsection}{\numberline {17.1}Research progress presentation}{19}{subsection.17.1}%
+\contentsline {section}{\numberline {A}Active file map}{19}{appendix.A}%
+\contentsline {section}{\numberline {B}Retained numerical excerpts}{20}{appendix.B}%
+\contentsline {section}{\numberline {C}Suggested experiment-record template}{21}{appendix.C}%
