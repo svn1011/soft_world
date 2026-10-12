@@ -274,6 +274,12 @@ class Soft3WorkingCommandSubscriber(Node):
             self.module_measurement_publishers.append({
                 "phi": self.create_publisher(Float64, f"{root}/measured_phi", 10),
                 "theta": self.create_publisher(Float64, f"{root}/measured_theta", 10),
+                "applied_torque": self.create_publisher(
+                    Float64, f"{root}/applied_phi_torque", 10
+                ),
+                "applied_theta": self.create_publisher(
+                    Float64, f"{root}/applied_theta", 10
+                ),
             })
             for station_name, _, angles, _ in SENSOR_RING_DEFINITIONS:
                 sensor_root = f"{root}/sensors/{station_name}"
@@ -365,6 +371,12 @@ class Soft3WorkingCommandSubscriber(Node):
             publishers = self.module_measurement_publishers[module_index]
             publishers["phi"].publish(Float64(data=float(phi)))
             publishers["theta"].publish(Float64(data=float(theta)))
+            publishers["applied_torque"].publish(Float64(
+                data=float(self.applied_torques[module_index])
+            ))
+            publishers["applied_theta"].publish(Float64(
+                data=float(self.applied_thetas[module_index])
+            ))
 
             for station_name, local_disk, angles, _ in SENSOR_RING_DEFINITIONS:
                 disk_index = start + local_disk

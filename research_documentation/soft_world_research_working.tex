@@ -793,20 +793,44 @@ The default design includes a zero-command baseline and isolates one module at
 a time. For every module it evaluates
 $\tau_c\in\{0.25,0.50,0.75,1.00\}$~N\,m and
 $\theta\in\{-90,-45,0,45,90\}\degrees{}$, producing 61 cases. Each case is
-allowed to settle for 3~s and is then recorded for 1~s at 20~Hz, for a planned
-total of approximately 1,220 raw time samples in 4.1~min. Torque values,
-directions, repetitions, settling duration, recording duration, sample rate,
-and output path are command-line parameters. A three-repetition, 2~s recording
-protocol produces approximately 7,320 samples, while the optional
-\texttt{all\_same} sweep applies each command pair to all modules together.
+allowed to settle for 3~s. The simulator publishes its internally applied torque
+and applied theta for each module. Recording is permitted only after every
+module's applied torque is within 0.005~N\,m of its command and its circular
+applied-theta error is within 2\degrees{} continuously for 0.5~s. Exactly one
+synchronized snapshot is then recorded for the case. If the command gate is not
+satisfied within 15~s, the case is marked failed and no sensor sample is stored.
+Thus a complete default run contains 61 time snapshots and 1,098 long-format
+sensor observations. Phi is retained as descriptive output but is not part of
+the recording gate. Torque values, directions, repetitions, settling duration,
+tolerances, hold duration, timeout, and output path are command-line parameters.
+The optional \texttt{all\_same} sweep applies each command pair to all modules
+together.
 
-The workbook contains five sheets: \texttt{Metadata} records the protocol and
-model assumptions; \texttt{Sensor\_Map} identifies module, axial station,
-gauge, and circumferential angle; \texttt{Cases} records command and mean
-measured pose for each trial; \texttt{Samples} preserves synchronized raw
-time-series rows; and \texttt{Sensor\_Summary} reports count, mean, sample
-standard deviation, minimum, maximum, and valid fraction for every sensor and
-case. A small standard-library writer,
+For operation on the Data-Collection branch, the three-module simulator is
+started first with \path{soft_3_working.launch.py}. A second sourced terminal
+then runs exactly one command publisher. Manual module torque/theta control
+uses \path{control_soft_3_working.py}; the automated 61-case experiment uses
+\path{collect_soft_3_working.py}.
+The controller and collector must not run concurrently because both publish to
+the same module command topics. The collector generates its own commands and
+therefore requires no separate controller process.
+
+The collector now follows the user-edited \texttt{Final Data.xlsx} reference
+layout. That workbook was inspected read-only and contains four sheets:
+\texttt{Scenario Information} records the acquisition settings and completion
+counts; \texttt{Sensor Map} identifies all 18 gauges; \texttt{Samples}
+contains one 38-field synchronized row per successful case; and
+\texttt{Final Sensor Data} expands each snapshot to 18 long-format rows. The
+13 long-table fields are case number, module number, section number, sensor
+number, torque command, theta command, voltage, applied torque, applied theta,
+commanded phi, measured phi, circumferential sensor angle, and sensor ID. The
+first seven remain the mandatory command and voltage fields. The recording
+gate itself is unchanged: applied torque and theta must satisfy their
+tolerances before the single snapshot is accepted. The reference workbook is
+protected operationally because new runs use timestamped
+\texttt{Final\_Data\_collection\_working} filenames and the collector refuses
+to overwrite any existing output path. A
+small standard-library writer,
 \path{scripts/xlsx_writer_working.py}, creates the XLSX archive without adding
 a pandas, openpyxl, or xlsxwriter dependency. This is a simulation data
 acquisition mechanism: the stored voltages remain pose-derived predictions of
@@ -833,6 +857,21 @@ and LibreOffice Calc opened and resaved it. The substantial invalid fraction is
 itself an experimental result: it indicates that the present pose-derived
 strain/ideal-bridge assumptions exceed their stated nominal operating region
 for many commanded poses and must not be treated as validated hardware output.
+An enhanced copy,
+\path{research_data_working/soft_3_working_voltage_dataset_20261009_094852_long_format.xlsx},
+preserves those original 1,220 time samples and adds 21,960 analysis-ready
+\texttt{Sensor\_Data} rows. The original workbook remains unchanged as the raw
+acquisition artifact.
+
+The command-gated one-iteration protocol was executed on October~12, 2026 and
+saved as
+\path{research_data_working/soft_3_working_command_gated_dataset_working.xlsx}.
+All 61 cases passed the applied-command gate. The workbook contains 61 raw
+snapshots and 1,098 long-format sensor rows. Maximum applied torque and theta
+errors at capture were 0.0~N\,m and 0.0\degrees{}, respectively; target wait
+times ranged from 0.50037 to 4.12517~s. This directly verifies the requested
+recording condition and one-iteration rule. It does not validate the physical
+bridge model.
 
 A 12-second headless regression commanded
 $(\tau_{c,1},\tau_{c,2},\tau_{c,3})=(0.50,0.75,1.00)$~N\,m and

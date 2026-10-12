@@ -580,13 +580,13 @@ def build_deck(document, context):
             deck.text(page, "→", x + 7.15, 4.25, 0.7, 0.8,
                       25, MID, True, align=1)
     deck.metric(page, "61", "default cases", 2.0, 8.3, 8.6, MAROON)
-    deck.metric(page, "1,220", "collected raw rows", 12.6, 8.3, 8.6, TEAL)
-    deck.metric(page, "7,320", "3 repeats × 2 s", 23.2, 8.3, 8.6, GOLD)
+    deck.metric(page, "61", "one snapshot per case", 12.6, 8.3, 8.6, TEAL)
+    deck.metric(page, "1,098", "long-format sensor rows", 23.2, 8.3, 8.6, GOLD)
     deck.bullet_list(page, [
-        "Workbook sheets: Metadata, Sensor_Map, Cases, Samples, Sensor_Summary.",
-        "Every raw row preserves three commands, three measured poses, 18 voltages, and 18 validity flags.",
-        "Full sweep completed: 61/61 cases and 1,220/1,220 synchronized rows.",
-        "68.10% of 21,960 validity observations were nominal; 83 non-finite voltages remain blank and flagged.",
+        "Four sheets match Final Data.xlsx, including 38-column Samples and 13-column Final Sensor Data.",
+        "Mandatory fields: case, module, section, gauge, torque command, θ command, and voltage.",
+        "Recording starts only after applied torque/theta pass a continuous 0.5 s command gate.",
+        "Full gated sweep: 61/61 cases, one snapshot per case, and 1,098 sensor rows.",
         "Voltage remains pose-derived simulation output; physical calibration is still required.",
     ], 2.0, 12.1, 29.0, 1.05, 11.7)
 

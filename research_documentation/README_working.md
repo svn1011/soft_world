@@ -30,10 +30,15 @@ The working repository includes a compiled PDF. Rebuild it after every research
 update so the PDF and TeX source do not diverge.
 
 The automated three-module datasets are written under
-`../research_data_working/`. The XLSX files contain raw synchronized samples,
-case summaries, the sensor map, and protocol metadata. Preserve the raw
-workbook and record any change to the simulated bridge model before comparing
-runs.
+`../research_data_working/`. New XLSX files follow the protected
+`Final Data.xlsx` reference layout: `Scenario Information`, `Sensor Map`,
+`Samples`, and `Final Sensor Data`. The long table begins with case, module,
+section, gauge, torque command, theta command, and voltage and contains the
+same 13 columns as the reference. The wide table contains 38 command, applied,
+measured-pose, and voltage fields. The collector rejects an existing output
+path, so it cannot overwrite the reference or another completed run. Preserve the
+raw workbook and record any change to the simulated bridge model before
+comparing runs.
 
 `validation_record_working.txt` retains available numerical excerpts from
 earlier tests. It is not a complete raw dataset, a fresh experiment, or a
@@ -43,3 +48,11 @@ data when running new research experiments.
 Keep future report updates in these working documentation files. The report
 records an inspected snapshot; later simulator changes must be reflected here
 before relying on it as a methods description.
+
+## Data-Collection branch operating sequence
+
+Launch `soft_3_working.launch.py` first. In a second sourced terminal, run
+either `control_soft_3_working.py` for manual torque/theta control or
+`collect_soft_3_working.py` for the automated 61-case acquisition. Never run
+those two command publishers together. The collector supplies its own commands
+and writes a new timestamped workbook; it does not modify `Final Data.xlsx`.

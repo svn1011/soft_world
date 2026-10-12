@@ -1,34 +1,35 @@
 # SoftWorld
 
-SoftWorld is a ROS 2 Humble package for simulating a constant-curvature,
-multi-disc soft limb in NVIDIA Isaac Sim. The active **working** configuration
-contains one physical leader limb in Isaac Sim, six simulated strain gauges,
-and an RViz model reconstructed from the live sensor readings.
+SoftWorld is a ROS 2 Humble package for simulating constant-curvature,
+multi-disc soft limbs in NVIDIA Isaac Sim. The **Data-Collection** branch uses
+the `soft_3_working` robot: three hanging six-disc modules with independent
+torque and bending-direction commands and 18 simulated strain gauges.
 
-The previous configuration with both leader and follower limbs in Isaac Sim is
-retained as a backup.
+The repository also retains the single-module RViz workflow and the older
+in-simulation follower configuration as backups.
 
-## System overview
+## Data-collection system overview
 
 ```text
-Position or torque command
-          |
-          v
-Isaac Sim leader limb
-          |
-          v
-Six pose-based strain gauges
-          |
-          v
-Curvature reconstruction
-          |
-          v
-/joint_states -> robot_state_publisher -> /tf -> RViz limb
+Manual three-module controller     Automated 61-case collector
+               \                   /
+                v                 v
+             ROS torque/theta commands
+                        |
+                        v
+         Three-module soft robot in Isaac Sim
+                        |
+                        v
+             18 virtual strain gauges
+                        |
+                        v
+       Live voltage plots + timestamped XLSX data
 ```
 
-The RViz limb does not receive the leader's command messages. Its shape is
-calculated from sensor measurements, so moving the Isaac Sim limb manually
-while simulation is running also updates the RViz model.
+The automated collector commands the robot, waits until applied torque and
+theta reach their targets, and then records one synchronized 18-sensor
+snapshot. The manual controller and collector are alternative command sources,
+not processes to run together.
 
 ## Requirements
 
@@ -118,7 +119,77 @@ cd "$SOFT_WORLD_WS"
 source install/setup.bash
 ```
 
-## Launch the working system
+## Data-Collection branch: quick start
+
+Use `soft_3_working` for both manual robot control and automated data
+collection. Start the simulator first, and then choose **either** manual control
+**or** data collection. Do not run the controller and collector together
+because both publish commands to the same robot.
+
+### Terminal 1 — start the three-module robot
+
+```bash
+cd "$SOFT_WORLD_WS"
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ISAAC_SIM_PATH="$HOME/isaacsim"
+ros2 launch soft_world soft_3_working.launch.py
+```
+
+Wait until Isaac Sim has loaded the robot. This launch also opens the live
+graphs for all 18 bridge-voltage sensors.
+
+### Terminal 2A — manually control the robot
+
+Open another terminal and run:
+
+```bash
+cd "$SOFT_WORLD_WS"
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 scripts/control_soft_3_working.py --ros-args \
+  -p module_1_phi_torque:=0.50 -p module_1_theta_position:=0.0 \
+  -p module_2_phi_torque:=0.75 -p module_2_theta_position:=90.0 \
+  -p module_3_phi_torque:=1.00 -p module_3_theta_position:=-90.0
+```
+
+For each module, `phi_torque` is the bending torque in N m and
+`theta_position` is the bending direction in degrees. Torque is limited to
+plus or minus 1.0 N m. Press `Ctrl+C` in this terminal to stop the controller.
+
+### Terminal 2B — collect the complete voltage dataset
+
+First stop `control_soft_3_working.py` with `Ctrl+C` if it is running. Keep the
+simulator from Terminal 1 open, then run in a second sourced terminal:
+
+```bash
+cd "$SOFT_WORLD_WS"
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+python3 scripts/collect_soft_3_working.py
+```
+
+The collector controls the robot automatically, so no separate control script
+is needed. The default run performs 61 torque/theta cases and records exactly
+one snapshot per successful case after the applied torque and theta reach
+their commands. A successful complete run produces 61 synchronized samples
+and 1,098 sensor rows.
+
+The new workbook is saved under `research_data_working/` with a timestamped
+name such as `Final_Data_collection_working_YYYYMMDD_HHMMSS.xlsx`. It contains
+`Scenario Information`, `Sensor Map`, `Samples`, and `Final Sensor Data`.
+The protected `research_data_working/Final Data.xlsx` reference is never
+overwritten; the collector also rejects any existing `--output` path.
+
+In short:
+
+```text
+Manual test:       launch simulator -> run control_soft_3_working.py
+Dataset collection: launch simulator -> run collect_soft_3_working.py
+Never run the controller and collector at the same time.
+```
+
+## Single-module RViz system (optional)
 
 ```bash
 cd "$SOFT_WORLD_WS"
@@ -580,38 +651,59 @@ python3 scripts/collect_soft_3_working.py
 The default `one_at_a_time` experiment records a zero-torque baseline followed
 by four torques (0.25, 0.50, 0.75, and 1.00 N m) at five theta directions
 (-90, -45, 0, 45, and 90 degrees) for each of the three modules. This is 61
-cases, approximately 4.1 minutes, and approximately 1,220 sample rows at 20 Hz.
-The exact case count, planned duration, progress, and destination are printed
-before and during collection. Commands return to zero when the run finishes or
-is interrupted with `Ctrl+C`.
+cases. Each case records exactly one synchronized snapshot only after the
+simulator's applied torque is within 0.005 N m of its command and applied theta
+is within 2 degrees of its command continuously for 0.5 seconds. A case that
+does not reach both commands within 15 seconds is marked as failed and produces
+no voltage row. The exact case count, gate result, wait time, progress, and
+destination are printed during collection. Commands return to zero when the run
+finishes or is interrupted with `Ctrl+C`.
 
-For a repeated-trial research dataset with a two-second measurement window:
+The default one-iteration experiment is:
 
 ```bash
 python3 scripts/collect_soft_3_working.py \
   --torques 0.25 0.50 0.75 1.00 \
   --thetas -90 -45 0 45 90 \
-  --repetitions 3 \
+  --repetitions 1 \
   --settle-seconds 3 \
-  --record-seconds 2 \
-  --sample-rate 20
+  --samples-per-case 1 \
+  --torque-tolerance-nm 0.005 \
+  --theta-tolerance-deg 2 \
+  --target-hold-seconds 0.5 \
+  --target-timeout 15
 ```
 
-That command plans 183 cases and approximately 7,320 time samples. Use
-`--sweep-mode all_same` to apply each torque/theta pair to all three modules at
-once instead of isolating one module. Use `--output path/name.xlsx` to choose a
-filename. Without it, the timestamped workbook is saved under
-`research_data_working/`.
+This produces 61 synchronized snapshots and 1,098 long-format sensor rows when
+all targets succeed. Use `--sweep-mode all_same` to apply each torque/theta pair
+to all three modules at once. Use `--output path/name.xlsx` to choose a filename.
+Without it, the timestamped workbook is saved under `research_data_working/`.
 
-Each workbook contains `Metadata`, `Sensor_Map`, `Cases`, `Samples`, and
-`Sensor_Summary` sheets. Every raw row includes all three commanded torque/theta
-pairs, all three measured phi/theta pairs, all 18 bridge voltages, and all 18
-validity flags. The summary reports mean, standard deviation, minimum, maximum,
-and valid fraction for every sensor and case. The collector refuses to run
+Each new workbook matches the read-only `Final Data.xlsx` structure and contains
+`Scenario Information`, `Sensor Map`, `Samples`, and `Final Sensor Data`.
+`Final Sensor Data` is the primary analysis-ready table: each row is one sensor
+observation, and its first seven columns are `case number`, `module number`,
+`section number`, `sensor number`, `torque command Nm`, `theta command deg`,
+and `voltage V`. `section number` is `1/3` or `2/3`, `sensor number` is
+`G1`, `G2`, or `G3`,
+and torque/theta are the exact commands for that sensor's module. Additional
+columns preserve applied torque, applied theta, commanded and measured phi,
+circumferential sensor angle, and sensor ID. This is the same 13-column schema
+used by `Final Data.xlsx`.
+
+The 38-column `Samples` sheet includes all three
+commanded torque/theta pairs, all three measured phi/theta pairs, all 18 bridge
+voltages, and all three applied torque/theta pairs. The
+collector refuses to run
 beside the normal controller unless the deliberate
 `--allow-competing-controller` override is supplied. These voltages are still
 pose-derived simulation outputs from the ideal bridge model; an Excel export
 does not make them hardware-calibrated measurements.
+
+`research_data_working/Final Data.xlsx` is the protected reference dataset.
+The collector never overwrites an existing workbook. New runs default to a
+timestamped `Final_Data_collection_working_*.xlsx` file, and `--output` must
+also name a path that does not already exist.
 
 ## In-simulation follower backup
 
