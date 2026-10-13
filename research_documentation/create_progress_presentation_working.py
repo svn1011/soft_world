@@ -543,6 +543,32 @@ def build_deck(document, context):
               "calibrate physical torque, material response, or payload capacity.",
               23.0, 7.8, 8.1, 4.8, 13.2, DARK)
 
+    page = deck.new_slide("Minimum-Energy Horizontal Tip Circle", "Linked branch")
+    deck.metric(page, "212.34 mm", "measured mean radius",
+                1.2, 2.7, 9.8, MAROON)
+    deck.metric(page, "0.71 mm", "height peak-to-peak",
+                11.7, 2.7, 9.8, TEAL)
+    deck.metric(page, "0.1254 N·m", "maximum module command",
+                22.2, 2.7, 9.8, GOLD)
+    deck.text(page, "Constrained constant-curvature solution", 1.4, 6.1,
+              15.0, 0.7, 18, MAROON, True)
+    deck.bullet_list(page, [
+        "Minimizes 0.5 Σ wᵢτᵢ² subject to requested tip radius and height.",
+        "All 15 bending intervals and both rigid connector spans are modeled.",
+        "Optimized torques stay constant while the common bending plane rotates.",
+        "Default radius: 212.5 mm = half of the 425 mm modeled limb length.",
+        "Path height is 0.40 m; the 54 s period preserves the prior tip speed.",
+        "Full revolution passed: 0.76 mm radial and 0.71 mm height variation.",
+    ], 1.4, 7.15, 20.0, 1.4, 13.6)
+    deck.rectangle(page, 22.4, 6.1, 9.5, 8.2, WHITE, 0xD7D2CC, True)
+    deck.text(page, "Research boundary", 23.0, 6.7, 8.2, 0.6,
+              17, MAROON, True)
+    deck.text(page,
+              "Energy is a normalized squared-command/elastic proxy. It is not "
+              "electrical consumption, actuator work, or calibrated mechanical "
+              "energy in joules.",
+              23.0, 7.8, 8.1, 4.8, 13.2, DARK)
+
     page = deck.new_slide("Eighteen-Channel Bridge-Voltage Instrumentation", "sensing")
     deck.image(page, ASSETS / "soft_3_working_18_voltage.png",
                0.9, 2.25, 24.9, 14.25)
@@ -583,7 +609,7 @@ def build_deck(document, context):
     deck.text(page, "A reproducible six-disc research platform now connects",
               2.0, 3.1, 29.5, 0.9, 25, MAROON, True, align=1)
     outcomes = [
-        ("CONTROL", "Position + calibrated torque admittance"),
+        ("CONTROL", "Position + torque admittance + minimum-energy circle"),
         ("SHAPE", "Synchronized five-interval constant-curvature target"),
         ("SENSING", "Six pose-derived strain channels + bridge voltages"),
         ("VISUALIZATION", "Isaac Sim + sensor-driven RViz reconstruction"),

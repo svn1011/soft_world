@@ -247,6 +247,9 @@ class Soft3WorkingCommandSubscriber(Node):
         self.drive_targets = []
         self.sensor_publishers = {}
         self.module_measurement_publishers = []
+        self.tip_position_publisher = self.create_publisher(
+            Float64MultiArray, "/soft_snake/tip/world_position", 10
+        )
 
         for module_index in range(MODULE_COUNT):
             module_number = module_index + 1
@@ -354,7 +357,10 @@ class Soft3WorkingCommandSubscriber(Node):
                 x_target.Set(target_x)
                 y_target.Set(target_y)
 
-    def publish_measurements(self, orientations):
+    def publish_measurements(self, positions, orientations):
+        tip_message = Float64MultiArray()
+        tip_message.data = np.asarray(positions[-1], dtype=np.float64).tolist()
+        self.tip_position_publisher.publish(tip_message)
         orientations = np.asarray(orientations, dtype=np.float64)
         for module_index in range(MODULE_COUNT):
             start = module_start_disk(module_index)
@@ -492,8 +498,8 @@ def main():
         world.render()
         if not rclpy.ok():
             break
-        _, orientations = disks.get_world_poses()
-        node.publish_measurements(orientations)
+        positions, orientations = disks.get_world_poses()
+        node.publish_measurements(positions, orientations)
 
     node.destroy_node()
     if started_rclpy and rclpy.ok():

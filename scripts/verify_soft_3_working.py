@@ -133,8 +133,8 @@ def main():
                         float(np.rad2deg(np.linalg.norm(bend)))
                     )
 
-        _, orientations = disks.get_world_poses()
-        node.publish_measurements(orientations)
+        positions, orientations = disks.get_world_poses()
+        node.publish_measurements(positions, orientations)
         sensor_count = sum(
             len(publishers["gauges"])
             for publishers in node.sensor_publishers.values()

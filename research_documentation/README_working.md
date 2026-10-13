@@ -25,8 +25,9 @@ upload the `.tex` file to Overleaf as the project's main document. No external
 figures, bibliography file, shell escape, or repository-specific absolute paths
 are needed to compile it. Overleaf compilation has not been tested here.
 
-No `pdflatex` or `tectonic` executable was available when this document was
-created, so a PDF was not generated and LaTeX compilation is not yet verified.
+The report was rebuilt successfully with `pdflatex` after the half-length
+circle-radius update. The generated `soft_world_research_working.pdf` is kept
+beside the editable source.
 
 `validation_record_working.txt` retains available numerical excerpts from
 earlier tests. It is not a complete raw dataset, a fresh experiment, or a
@@ -36,3 +37,20 @@ data when running new research experiments.
 Keep future report updates in these working documentation files. The report
 records an inspected snapshot; later simulator changes must be reflected here
 before relying on it as a methods description.
+
+## Linked branch circular trajectory
+
+The Linked branch adds a three-module horizontal circular-tip controller. Run
+it after building and sourcing the workspace with:
+
+```bash
+ros2 launch soft_world soft_3_circle_working.launch.py
+```
+
+The default constrained solution uses a 212.5 mm radius, exactly half the
+0.425 m base-to-tip centerline length, a 0.40 m world height, 54 s revolution,
+and 6 s settling hold. The optimizer minimizes the weighted
+sum of squared torque commands using the constant-curvature model, then rotates
+the optimized bending plane. This quantity is a normalized simulation energy
+proxy, not calibrated energy in joules. The report contains the formulation,
+default commands, actual full-revolution results, and limitations.

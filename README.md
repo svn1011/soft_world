@@ -40,6 +40,7 @@ while simulation is running also updates the RViz model.
 - ROS packages `rviz2`, `robot_state_publisher`, `tf2_ros`, `sensor_msgs`,
   and `std_msgs`
 - Python 3 Matplotlib with the Tk backend
+- Python 3 SciPy for the constrained minimum-energy circle solver
 
 For a standard ROS 2 Humble installation, source:
 
@@ -64,7 +65,7 @@ packages with:
 ```bash
 sudo apt update
 sudo apt install python3-colcon-common-extensions python3-matplotlib \
-  python3-tk ros-humble-rviz2 ros-humble-robot-state-publisher \
+  python3-tk python3-scipy ros-humble-rviz2 ros-humble-robot-state-publisher \
   ros-humble-tf2-ros ros-humble-sensor-msgs ros-humble-std-msgs
 ```
 
@@ -523,10 +524,91 @@ Commands use these topic pairs:
 ```
 
 Measured module bend and direction are available under
-`/soft_snake/module_N/measured_tip/{phi,theta}`. Sensor topics use
+`/soft_snake/module_N/{measured_phi,measured_theta}`. Sensor topics use
 `/soft_snake/module_N/sensors/{one_third,two_thirds}/gauge_G/` followed by
 `strain`, `bridge_voltage`, or `bridge_valid`, where `N` and `G` are 1--3.
 This gives 18 channels for each reported sensor quantity.
+
+### Minimum-energy horizontal tip circle
+
+The new circular-path launch starts the three-module simulator, all 18 voltage
+plots, and the minimum-energy circle controller together:
+
+```bash
+cd "$SOFT_WORLD_WS"
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+export ISAAC_SIM_PATH="$HOME/isaacsim"
+ros2 launch soft_world soft_3_circle_working.launch.py
+```
+
+The default path is a horizontal circle centered on the fixed base axis:
+
+- limb base-to-tip centerline length: `0.425` m (17 disc pitches);
+- radius: `0.2125` m, exactly half the modeled limb length;
+- world height: `0.40` m;
+- one revolution: `54.0` s;
+- initial settling time: `6.0` s.
+
+Change those values through launch arguments:
+
+```bash
+ros2 launch soft_world soft_3_circle_working.launch.py \
+  circle_radius_m:=0.2125 \
+  circle_height_m:=0.40 \
+  circle_period_s:=54.0 \
+  settle_seconds:=6.0
+```
+
+Do not run `control_soft_3_working.py` at the same time, because it publishes
+to the same module command topics.
+
+The model includes all 15 constant-curvature intervals and both rigid
+inter-module connector spans. At startup it solves
+
+```text
+minimize  0.5 * sum(weight_i * torque_i^2)
+subject to modeled tip radius = requested radius
+           modeled tip height = requested height
+           |torque_i| <= 1.0 N m
+```
+
+It then holds the optimized torque magnitudes constant and rotates the common
+bending plane around the vertical axis. Rotational symmetry therefore keeps
+the modeled radius, height, and energy proxy constant around the circle. For
+the default 212.5 mm radius at 0.40 m height, the solution is approximately
+`[0.12543, 0.12008, 0.04245]` N m for modules 1--3. The radius is derived as
+`0.5 * (3 * 5 + 2) * 0.025 m`, so it includes all 15 actuated intervals and
+both connector spans. The initial shape settles
+before angular motion begins.
+
+Monitor the actual and requested path with:
+
+```bash
+ros2 topic echo /soft_snake/tip/world_position
+ros2 topic echo /soft_snake/circle/target_tip_position
+ros2 topic echo /soft_snake/circle/tip_position_error
+ros2 topic echo /soft_snake/circle/normalized_command_energy
+```
+
+This is a normalized command/elastic-energy proxy based on the existing
+torque-to-bend mapping. It is not measured electrical energy, actuator work,
+or calibrated mechanical energy in joules. A slower circle reduces dynamic
+motion, but true hardware minimum-energy control will require actuator power
+and material-loss measurements.
+
+The bounded headless regression can be repeated with:
+
+```bash
+source /opt/ros/humble/setup.bash
+"$ISAAC_SIM_PATH/python.sh" scripts/verify_soft_3_circle_working.py
+```
+
+The recorded default regression passed with a 212.34 mm mean radius, 0.76 mm
+radius peak-to-peak variation, 0.39987 m mean height, 0.71 mm height
+peak-to-peak variation, 27.25 mm RMS time-indexed target error, and a maximum
+command of 0.12543 N m. The trajectory completed one full revolution. These are current
+simulation results, not physical-hardware validation.
 
 Open all 18 strain plots in another sourced terminal:
 
@@ -703,10 +785,20 @@ python3 scripts/control_quadraped.py
 - `usd/soft_3_working.usd` — active three-module hanging snake asset.
 - `launch/soft_3_working.launch.py` — three-module simulator
   launch.
+- `launch/soft_3_circle_working.launch.py` — simulator plus minimum-energy
+  horizontal circular-tip controller.
 - `scripts/load_soft_3_working.py` — three-module physics,
   independent control, measured bends, and 18-sensor publication.
 - `scripts/control_soft_3_working.py` — three independent
   phi-torque/theta command pairs.
+- `scripts/minimum_energy_circle_working.py` — constant-curvature forward
+  model and constrained minimum-command-energy solver.
+- `scripts/control_soft_3_circle_working.py` — circular target and optimized
+  torque/direction publisher.
+- `scripts/test_minimum_energy_circle_working.py` — offline solver and flat
+  circle tests.
+- `scripts/verify_soft_3_circle_working.py` — bounded Isaac Sim full-circle
+  radius, height, tracking, and torque regression.
 - `scripts/plot_soft_3_working.py` — 18 strain or bridge-voltage
   plots.
 - `scripts/verify_soft_3_working.py` — bounded headless

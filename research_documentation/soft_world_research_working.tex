@@ -88,6 +88,15 @@ actuation mappings~\cite{webster2010}. Equations labeled as implementation
 equations describe this repository and should not be attributed wholesale
 to that review.
 
+Scholarly attribution is applied according to the role of each equation.
+Published kinematic, mechanics, and numerical-method equations are cited at
+their first use. Equations adapted to the present geometry identify both the
+source model and the adaptation. Repository-specific mappings, fitted gains,
+and optimization objectives are labeled as implementation assumptions rather
+than presented as results from the cited literature. This separation is
+important because a citation can support the form of a model without validating
+its parameters or its accuracy for this robot.
+
 The repository's base Git revision at documentation time was
 \begin{lstlisting}
 e3e976c97e63596887ccb22e03ad33523c25db72
@@ -208,7 +217,9 @@ selects index~5.
 \section{Constant-curvature reference kinematics}
 \subsection{Ideal continuous section}
 For a planar constant-curvature section of arc length $L$, bending magnitude
-$\Phi$, and bending-plane direction $\Theta$,
+$\Phi$, and bending-plane direction $\Theta$, the standard homogeneous
+constant-curvature construction reviewed by Webster and Jones~\cite{webster2010}
+gives
 \begin{equation}
 \kappa=\frac{\Phi}{L},\qquad R=\frac{1}{\kappa},\qquad
 \mathbf{a}(\Theta)=(-\sin\Theta,\cos\Theta,0)^T.
@@ -776,6 +787,62 @@ the capture. The \texttt{soft\_3\_working} ROS launch now starts the live
 18-channel bridge-voltage plotter together with Isaac Sim; plotting begins as
 soon as sensor messages are available.
 
+The Linked branch adds a horizontal circular-tip trajectory using a
+minimum-command-energy constant-curvature model. Its section kinematics are
+adapted from the constant-curvature construction reviewed by Webster and
+Jones~\cite{webster2010}. The forward model composes
+the symmetric half-translation/rotation/half-translation transform for all
+five intervals in each module and includes one straight disc-pitch span for
+each rigid connector. For a requested radius $r$ and vertical drop $h$ from
+the fixed base, the startup optimizer solves
+\begin{equation}
+ \underset{\boldsymbol{\tau}}{\operatorname{minimize}}\quad
+ E_c=\frac{1}{2}\sum_{j=1}^{3}w_j\tau_j^2,
+ \qquad
+ \text{subject to}\quad x_{\mathrm{tip}}=r,\quad
+ z_{\mathrm{tip}}=-h,\quad |\tau_j|\leq1~\mathrm{N\,m},
+ \label{eq:circle_energy_proxy}
+\end{equation}
+where $\phi_j=\pi\tau_j$ under the existing 180-degree-per-newton-metre
+mapping. Quadratic elastic-energy densities arise in rod models under linear
+constitutive assumptions; Cosserat-rod continuum-robot mechanics provide a
+more complete load-dependent treatment~\cite{rucker2011}. However, the
+variables $\tau_j$ here are normalized command inputs rather than identified
+section moments, and the weights $w_j$ are not calibrated stiffnesses.
+Therefore, Equation~\eqref{eq:circle_energy_proxy} is a repository-specific
+quadratic command-effort proxy, not the mechanical strain-energy equation from
+that literature. Equal default weights are used. The constrained problem is
+solved with the SLSQP method described by Kraft~\cite{kraft1988}; multiple
+starting points reduce dependence on a local initial guess. After solving one
+planar posture, the controller holds all three torque magnitudes constant and
+rotates their common bending plane. Isotropy about the vertical base axis then
+rotates the entire modeled endpoint without changing its radius, height, or
+$E_c$. This is more efficient and numerically cleaner than independently
+solving an inverse-kinematics problem at every trajectory sample.
+
+The modeled base-to-tip centerline contains 15 actuated intervals and two
+rigid connector spans, each with a 0.025~m pitch. Its total length is therefore
+$L=(15+2)(0.025)=0.425$~m. The default circle radius is derived from this
+geometry as $r=L/2=0.2125$~m rather than being an unrelated fixed value.
+Together with world height $z=0.40$~m and base height $z_b=0.75$~m, this gives
+module bends of approximately $(22.5768,21.6146,7.6409)\degrees{}$ and commands
+$(0.125427,0.120081,0.042449)$~N\,m. The normalized energy proxy is
+$E_c=0.0159766$. A six-second initial hold allows the posture to settle before
+the 54-second revolution starts. The longer period preserves approximately the
+earlier tangential tip speed despite the larger radius. The loader now publishes the measured final
+disc position on \path{/soft_snake/tip/world_position}; the controller also
+publishes target position, Euclidean error, and energy proxy under
+\path{/soft_snake/circle/}.
+
+An Isaac Sim headless full-revolution regression passed. It recorded a mean
+radius of 0.2123392~m, radial peak-to-peak variation of 0.0007649~m, mean
+height of 0.3998733~m, height peak-to-peak variation of 0.0007060~m, and
+time-indexed RMS target error of 0.0272539~m. Maximum absolute torque was
+0.125427~N\,m. The path is therefore flat and circular to the reported
+simulation tolerances. Equation~\eqref{eq:circle_energy_proxy} remains a
+normalized command/elastic-energy proxy, not calibrated actuator work,
+electrical energy, or mechanical energy in joules.
+
 A 12-second headless regression commanded
 $(\tau_{c,1},\tau_{c,2},\tau_{c,3})=(0.50,0.75,1.00)$~N\,m and
 $(\theta_1,\theta_2,\theta_3)=(0,90,-90)\degrees{}$. Measured module bends
@@ -815,6 +882,11 @@ control, a material constitutive model, or a hardware calibration; negative
 commands, payloads, disturbances, and arbitrary bending directions require
 separate validation. The quadruped and two-physical-limb backup were not part
 of these tests.
+\item The circular-path optimizer minimizes squared torque commands under the
+implemented kinematic map. It does not include rate-dependent damping loss,
+motor efficiency, electrical power, hysteresis, or material viscoelasticity.
+Consequently, ``minimum energy'' currently means the minimum of the stated
+simulation proxy, and must not be presented as a hardware energy optimum.
 \end{enumerate}
 
 \section{Reproducible operation and asset handling}
@@ -962,6 +1034,18 @@ R.~J. Webster III and B.~A. Jones,
 A review,'' \emph{The International Journal of Robotics Research},
 vol.~29, no.~13, pp.~1661--1683, 2010.
 \href{https://doi.org/10.1177/0278364910368147}{doi:10.1177/0278364910368147}.
+\bibitem{rucker2011}
+D.~C. Rucker and R.~J. Webster III,
+``Statics and dynamics of continuum robots with general tendon routing and
+external loading,'' \emph{IEEE Transactions on Robotics}, vol.~27, no.~6,
+pp.~1033--1044, 2011.
+\href{https://doi.org/10.1109/TRO.2011.2160469}{doi:10.1109/TRO.2011.2160469}.
+\bibitem{kraft1988}
+D.~Kraft, \emph{A Software Package for Sequential Quadratic Programming},
+Technical Report DFVLR-FB 88-28, Deutsche Forschungs- und Versuchsanstalt
+f\"ur Luft- und Raumfahrt, 1988.
+\href{https://degenerateconic.com/uploads/2018/03/DFVLR_FB_88_28.pdf}
+{Report DFVLR-FB 88-28}.
 \bibitem{implementation}
 SoftWorld working repository: README, working Python implementation, and
 six-disc USD assets. Inspected September~15, 2026; working snapshot extends
@@ -982,10 +1066,20 @@ Repository-relative file & Role\\\midrule
 and plots.\\
 \path{launch/soft_3_working.launch.py} & Three-module hanging
 snake launch.\\
+\path{launch/soft_3_circle_working.launch.py} & Three-module simulator and
+minimum-energy horizontal-circle controller launch.\\
 \path{scripts/load_soft_3_working.py} & Three-module physics,
 control consumption, measurements, and 18-gauge publication.\\
 \path{scripts/control_soft_3_working.py} & Three independent
 phi-torque and theta command pairs.\\
+\path{scripts/minimum_energy_circle_working.py} & Constant-curvature forward
+model and constrained minimum-command-energy posture solver.\\
+\path{scripts/control_soft_3_circle_working.py} & Horizontal circular-tip
+trajectory and ROS command publication.\\
+\path{scripts/test_minimum_energy_circle_working.py} & Offline solver,
+rotational-symmetry, and flat-circle regressions.\\
+\path{scripts/verify_soft_3_circle_working.py} & Isaac Sim full-revolution
+radius, height, error, and torque regression.\\
 \path{scripts/plot_soft_3_working.py} & Eighteen strain or bridge
 voltage graphs.\\
 \path{scripts/verify_soft_3_working.py} & Bounded three-module

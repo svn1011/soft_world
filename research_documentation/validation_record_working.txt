@@ -328,3 +328,34 @@ working system includes straight and 180-degree Isaac Sim views plus live
 six-channel strain and bridge-voltage graphs during 0, 0.5, and 1.0 N*m torque
 steps. The presentation distinguishes simulation/software verification from
 physical validation and includes the active 1.0 N*m / 180-degree cap.
+
+2026-10-12 - Minimum-energy horizontal circular tip trajectory
+----------------------------------------------------------------
+Added a constant-curvature forward model for all three modules, their 15
+actuated intervals, and two rigid connector spans. A multi-start SLSQP solve
+minimizes 0.5*sum(weight_i*torque_i^2) while constraining tip radius and
+height. The 0.425 m modeled centerline comprises 15 actuated intervals plus two
+rigid connector spans at 0.025 m each. Its default radius is now exactly half
+that length: 0.2125 m. At 0.40 m world height, the optimizer returned module
+bends [22.576814, 21.614584, 7.640900] degrees, torque commands
+[0.125427, 0.120081, 0.042449] N*m, constraint error 2.17e-16 m, and normalized
+energy proxy 0.0159766. Four offline tests passed: the half-length radius
+definition, endpoint constraints, rotational flat-circle invariance, and
+world-height invariance.
+
+The loader now publishes final-disc world position. A bounded Isaac Sim
+full-revolution regression at the 54 s default period recorded 541 samples and
+passed with:
+- requested radius: 0.212500000 m
+- mean radius: 0.212339212 m
+- radial peak-to-peak variation: 0.000764920 m
+- mean height: 0.399873257 m
+- height peak-to-peak variation: 0.000705957 m
+- time-indexed RMS target error: 0.027253931 m
+- maximum absolute torque command: 0.125426742 N*m
+- normalized energy proxy: 0.015976638
+
+The squared-command objective is a simulation energy proxy only. It does not
+measure motor electrical energy, actuator work, viscoelastic loss, or energy
+in joules. The ROS package build and launch-description argument inspection
+also passed.
