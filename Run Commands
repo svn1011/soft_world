@@ -1,0 +1,210 @@
+
+//////////////////////////////////////////////////////////////////////////
+                   LAUNCH AND CONTROL OF THE SIMULATION
+//////////////////////////////////////////////////////////////////////////
+
+OPEN
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+ros2 launch soft_world soft_world.launch.py
+
+//////////////////////////////////////////////////////////////////////////
+
+re-open
+
+colcon build
+source install/setup.bash
+ros2 launch soft_world soft_world.launch.py
+
+
+CONTROL
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+python3 scripts/control_soft_limb.py
+
+
+//////////////////////////////////////////////////////////////////////////
+
+WORKING - OPEN
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+ros2 launch soft_world soft_world_working.launch.py
+
+
+RE-OPEN
+
+colcon build --packages-select soft_world
+source install/setup.bash
+ros2 launch soft_world soft_world_working.launch.py
+
+
+WORKING - CONTROL
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+python3 scripts/control_soft_limb_working.py
+
+
+WORKING - HYBRID CONTROL
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+python3 scripts/control_soft_limb_hybrid_working.py
+
+
+WORKING - SENSOR
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+ros2 topic echo /soft_limb/sensors/one_third/strain
+
+//////////////////////////////////////////////////////////////////////////
+
+WORKING - 3 MODULES
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+ros2 launch soft_world soft_3_working.launch.py
+
+
+CONTROL - 3 MODULES
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+python3 scripts/control_soft_3_working.py --ros-args \
+  -p module_1_phi_torque:=0.50 -p module_1_theta_position:=0.0 \
+  -p module_2_phi_torque:=0.75 -p module_2_theta_position:=90.0 \
+  -p module_3_phi_torque:=1.00 -p module_3_theta_position:=-90.0
+
+python3 scripts/control_soft_3_working.py --ros-args \
+  -p module_1_phi_torque:=0.0 -p module_1_theta_position:=0.0 \
+  -p module_2_phi_torque:=0.0 -p module_2_theta_position:=0.0 \
+  -p module_3_phi_torque:=0.0 -p module_3_theta_position:=0.0
+
+//////////////////////////////////////////////////////////////////////////
+
+WORKING - 3 MODULES WITH AUTOMATIC 18 VOLTAGE GRAPHS
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+export ISAAC_SIM_PATH="$HOME/isaacsim"
+ros2 launch soft_world soft_3_working.launch.py
+
+
+OPEN AN EXTRA 18-VOLTAGE GRAPH WINDOW MANUALLY
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+SOFT_SNAKE_PLOT_SIGNAL=bridge_voltage python3 scripts/plot_soft_3_working.py
+
+//////////////////////////////////////////////////////////////////////////
+
+WORKING - 3 MODULE MINIMUM-ENERGY CIRCULAR PATH
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+export ISAAC_SIM_PATH="$HOME/isaacsim"
+ros2 launch soft_world soft_3_circle_working.launch.py
+
+
+3 MODULE CIRCULAR PATH - CUSTOM VALUES
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+export ISAAC_SIM_PATH="$HOME/isaacsim"
+ros2 launch soft_world soft_3_circle_working.launch.py \
+  circle_radius_m:=0.2125 \
+  circle_height_m:=0.40 \
+  circle_period_s:=54.0 \
+  settle_seconds:=6.0
+
+DO NOT RUN control_soft_3_working.py WHILE THE CIRCULAR-PATH LAUNCH IS RUNNING.
+
+//////////////////////////////////////////////////////////////////////////
+
+WORKING - 12 DISC QUADRUPED - OPEN IN TERMINAL 1
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+colcon build --packages-select soft_world
+source install/setup.bash
+ros2 launch soft_world soft_quadraped_working.launch.py
+
+
+WORKING - 12 DISC QUADRUPED - CONTROL IN TERMINAL 2
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+python3 scripts/control_quadraped_working.py --ros-args \
+  -p front_left.phi_torque:=0.50 -p front_left.theta:=0.0 \
+  -p front_right.phi_torque:=0.50 -p front_right.theta:=0.0 \
+  -p rear_left.phi_torque:=0.50 -p rear_left.theta:=0.0 \
+  -p rear_right.phi_torque:=0.50 -p rear_right.theta:=0.0
+
+LEFT LEGS HAVE A NET 180-DEGREE LENGTH-AXIS ROTATION.
+RIGHT LEGS HAVE A NET 360-DEGREE ROTATION AFTER THE ADDITIONAL 180-DEGREE TURN.
+KEEP ALL NEUTRAL THETA COMMANDS AT 0.0 DEGREES.
+USE POSITIVE TORQUE ON ALL FOUR LEGS FOR THE DOWNWARD-BENDING STANDING POSTURE.
+0.50 N*M REQUESTS 90 DEGREES. THE MEASURED-BEND FEEDBACK COMPENSATES LOAD.
+THE WORKING SIMULATOR USES 120 HZ PHYSICS AND 24/6 SOLVER ITERATIONS FOR
+RESPONSIVE, NEAR-REAL-TIME GUI MOTION.
+THE GUI RENDERS ONCE PER TWO PHYSICS STEPS (60 FPS TARGET), NOT AT 120 FPS.
+THE TORQUE RAMP AND BEND COMPENSATOR ARE TUNED FOR A QUICKER RESPONSE.
+PRESSURE-LIKE LIMB TUNING: HIGH STIFFNESS WITH MATCHED DAMPING FOR QUICK,
+STURDY ACTUATION WITHOUT A LOOSE RUBBER-CHAIN EFFECT.
+ACTIVE HIGH-PRESSURE-LIKE GAINS ARE ROLL 20,000,000/42,000 AND
+YAW 30,000,000/51,000 (STIFFNESS/DAMPING).
+
+
+WORKING - 12 DISC QUADRUPED - HEADLESS 90-DEGREE CHECK
+
+FIRST KEEP THE +0.50 N*M QUADRUPED CONTROLLER RUNNING IN TERMINAL 1.
+THEN RUN THIS IN TERMINAL 2:
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+SOFT_QUADRUPED_HEADLESS=1 SOFT_QUADRUPED_MAX_STEPS=1200 \
+  ~/isaacsim/python.sh \
+  install/soft_world/share/soft_world/scripts/soft_quadraped_grounded_working.py
+
+THE FINAL_BEND LINES REPORT THE MEASURED ANGLE OF EACH LEG.
+1200 STEPS EQUALS 10 SIMULATED SECONDS AT 120 HZ.
+
+
+WORKING - 12 DISC QUADRUPED - ZERO ALL LEG COMMANDS
+
+cd ~/soft_world
+. ~/ros2_humble/install/local_setup.bash
+source install/setup.bash
+python3 scripts/control_quadraped_working.py --ros-args \
+  -p front_left.phi_torque:=0.0 -p front_left.theta:=0.0 \
+  -p front_right.phi_torque:=0.0 -p front_right.theta:=0.0 \
+  -p rear_left.phi_torque:=0.0 -p rear_left.theta:=0.0 \
+  -p rear_right.phi_torque:=0.0 -p rear_right.theta:=0.0
+
+//////////////////////////////////////////////////////////////////////////
+
+OVERLEAF PROJECT
+
+overleaf_session2=s%3A3IBBlWCRtyCM5OQHuf02M_yTmFfp_CzA.4zEa9hqP2SjlyUUB8bYk8QHXDp8ecrksfcTVLxlm0uU; GCLB=CJjexK2rx8uThQEQAw
+
+//////////////////////////////////////////////////////////////////////////
+
+

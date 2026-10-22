@@ -359,3 +359,334 @@ The squared-command objective is a simulation energy proxy only. It does not
 measure motor electrical energy, actuator work, viscoelastic loss, or energy
 in joules. The ROS package build and launch-description argument inspection
 also passed.
+
+2026-10-19 - Working six-disc limb integrated into quadruped
+-------------------------------------------------------------
+Created new working-only quadruped simulator, controller, and launch files.
+The preserved legacy files still use the older topology. The working robot now
+references soft_limb_position_control_6_disc_working.usd for its body and four
+legs, uses 6 discs/5 intervals per limb, Disk_05 as the body tip, direct runtime
+D6 joints, X/Y vector bending, and the single-module 6400 stiffness / 240
+damping acceleration-drive parameters. Body endpoints and leg attachments were
+rescaled from +/-0.1375 m to +/-0.0625 m.
+
+The controller now treats phi as total base-to-tip bend. It sends phi/5 to the
+base interval and two phi/10 compatibility contributions to each later direct
+interval, with the same theta direction on both contributions. The body remains
+straight and locked.
+
+Validation performed:
+- Python compilation: PASS
+- git diff whitespace check on new quadruped files: PASS
+- colcon build --packages-select soft_world: PASS
+- 120-step headless Isaac topology/startup run: PASS
+- 2400-step headless Isaac run with live working ROS controller: PASS
+- Missing prim/joint, attachment, ROS publisher, segmentation fault: none
+
+These checks validate integration and command delivery only. Quantitative leg
+bend tracking, ground-contact stability, gait performance, and energy use have
+not yet been measured.
+
+2026-10-19 - Quadruped returned to 12 discs with hybrid control
+----------------------------------------------------------------
+The prior six-disc working quadruped was explicitly overwritten at the
+researcher's request; no six-disc quadruped backup was retained. The active
+working files are now based on the original stable 12-disc robot and load
+soft_limb_position_control.usd. Each of the five members has 12 discs and 11
+physical intervals with the original split-D6 topology and force-drive gains.
+
+Hybrid interface:
+- phi input: /<limb>/pair_NN/<joint>/roll/torque
+- theta input: /<limb>/pair_NN/<joint>/yaw/position
+- torque clamp: +/-1.0 N*m
+- torque slew: 2.0 N*m/s
+- nominal mapping: 1.0 N*m -> 180 degrees total bend
+- base share: 1/11; each later A/B share: 1/22
+- theta joint limit: +/-25 degrees
+- all startup commands: zero
+
+Validation performed:
+- Python compilation: PASS
+- colcon build --packages-select soft_world: PASS
+- 240-step headless Isaac startup: PASS
+- 1600-step headless live-command run: PASS
+- live command: front_left torque 0.1 N*m, theta 5 degrees
+- controller exited cleanly after bounded SIGINT
+- missing prim/joint, ROS publisher, segmentation fault: none
+
+This validates software startup and command delivery, not measured quadruped
+bend accuracy, contact stability, locomotion, or physical torque calibration.
+
+2026-10-19 - Corrected quadruped standing geometry
+---------------------------------------------------
+Diagnosis showed that the previous grounded file was still a horizontal
+top-view H at z=1 m. Removing its world constraint made the complete assembly
+fall; it was not a four-legged standing pose.
+
+The working 12-disc quadruped now uses:
+- horizontal locked body height: 0.2775 m
+- four legs rotated vertically downward
+- left/right leg-root offsets: +/-0.03 m
+- final foot disc: Disk_11
+- expected foot-disc center height: 0.0025 m
+- all bodies dynamic; no world-space hanging constraint
+
+Measured 480-step result:
+- mean body-disc height: 0.272047 m
+- front-left foot center: 0.002813 m
+- front-right foot center: 0.002752 m
+- rear-left foot center: 0.002709 m
+- rear-right foot center: 0.002732 m
+- standing verification: PASS
+
+A separate 2400-step / 10-second neutral collapse check passed the automatic
+requirements body_mean_z >= 0.15 m and every foot center <= 0.05 m. The camera
+was reframed around the 0.2775 m-tall standing robot.
+
+2026-10-19 - Vertical stance interpretation reverted; flat H restored
+-----------------------------------------------------------------------
+The researcher clarified that the quadruped must be completely flat. The
+vertical-legged interpretation above was incorrect and is superseded by this
+entry. The active working configuration now has:
+- body and four limbs coplanar in a top-view H
+- initial center height 0.021 m (1 mm nominal ground clearance)
+- left limbs aligned outward along +Y
+- right limbs aligned outward along -Y
+- FrontRight and RearRight rolled 180 degrees about each limb's local axis
+- hybrid 12-disc torque/theta control unchanged
+
+Measured 480-step flatness result:
+- disc count evaluated: 60
+- mean disc-center z: 0.020105 m
+- maximum-minus-minimum disc-center z: 0.000423 m
+- missing prim/joint or PhysX failure: none
+- flatness check: PASS
+
+The incorrect vertical-standing measurements are retained above only as
+development-history evidence and must not be described as the active geometry.
+
+2026-10-19 - Exact old quadruped restored; control-only update
+--------------------------------------------------------------
+The researcher clarified that the old quadruped already achieved the required
+motion when commanded. Both the vertical-legged interpretation and the later
+0.021 m flat-layout modification were therefore rejected.
+
+The active soft_quadraped_grounded_working.py was regenerated directly from
+soft_quadraped_grounded.py. A source diff confirms that the following remain
+identical to the old robot:
+- soft_limb_position_control.usd and 12-disc/11-interval topology
+- INITIAL_HEIGHT = 1.0 m
+- all body and leg translations and +/-90-degree rotations
+- four fixed attachment definitions and Disk_11/Disk_00 endpoints
+- body bend lock and every kinematic setting
+- roll/yaw stiffness and damping
+- bend limits, friction, restitution, physics rate, solver iterations
+- camera position and simulation loop behavior
+
+Only these items differ:
+- phi position subscription replaced by phi torque subscription
+- +/-1.0 N*m command clamp and 2.0 N*m/s slew
+- compensated equilibrium mapping 1.0 N*m -> 180 degrees total
+- base joint receives 1/11; each later A/B joint receives 1/22
+- theta remains the original yaw position path
+- class/node names and console text identify hybrid control
+
+Python compilation and git diff whitespace validation passed. Earlier standing
+and flatness measurements are historical rejected trials, not active results.
+
+2026-10-19 - Right-side local-axis mounting rotation authorized
+----------------------------------------------------------------
+The researcher explicitly requested a physical 180-degree rotation of the
+FrontRight and RearRight limbs about each limb's own longitudinal axis before
+attachment. The old quadruped positions, +/-90-degree placement rotations,
+height, USD, attachments, and physics parameters remain unchanged. A separate
+local-Z transform operation now supplies the requested axial rotation only on
+the two right limbs. FrontRight's default theta is zero because the physical
+mount supplies that reversal; RearRight is also zero. No theta kinematic
+remapping was included in this mounting-only change.
+
+2026-10-22 - Run Commands note synchronized
+--------------------------------------------
+The repository-root Run Commands note now includes separately labeled terminal
+blocks for the current three-module launch with automatic 18-channel voltage
+plots, an optional extra voltage plotter, the minimum-energy circular-path
+launch and arguments, and the working 12-disc quadruped launch/control/zero
+commands. Existing command-breaking spelling and ROS parameter-assignment
+errors were corrected. The quadruped block records that right-side neutral
+theta is zero because FrontRight and RearRight are physically mounted with a
+180-degree local axial rotation.
+
+2026-10-22 - Quadruped stability and all-leg axial mounting update
+------------------------------------------------------------------
+At the researcher's request, FrontLeft and RearLeft now receive the same
+180-degree local longitudinal-axis mounting rotation already used on the two
+right legs, so all four leg instances are axially rotated before attachment.
+Neutral theta remains zero. The nominal mirrored posture now commands +0.50
+N*m on the left legs and -0.50 N*m on the right legs.
+
+A conservative stability update adds linear damping 2.0 and angular damping
+10.0 to every quadruped disc and virtual-link rigid body. The quadruped torque
+command slew was reduced from 2.0 to 0.75 N*m/s to reduce drive impulses while
+ground contacts establish. Geometry, initial height, stiffness, joint damping,
+friction, solver settings, and the 1.0 N*m to 180-degree equilibrium mapping
+remain unchanged.
+
+2026-10-22 - Faster and stiffer quadruped response
+--------------------------------------------------
+The quadruped torque-command slew was increased from 0.75 to 1.5 N*m/s and
+the theta target speed from 45 to 60 degrees/s. Roll stiffness increased from
+2,000,000 to 2,500,000 with damping increased from 10,000 to 15,000. Yaw
+stiffness increased from 3,000,000 to 3,750,000 with damping increased from
+12,000 to 18,000. Increasing damping together with stiffness is intended to
+provide firmer holding without creating a deliberately underdamped response.
+Rigid-body damping, mounting transforms, geometry, command signs, torque
+limits, and the torque-to-bend mapping remain unchanged.
+
+2026-10-22 - Additional right-leg axial rotation for common torque sign
+------------------------------------------------------------------------
+FrontRight and RearRight received an additional 180-degree rotation about
+their local longitudinal axes. Relative to the previous all-leg-180 state,
+the left legs remain at a net 180 degrees and the right legs now have a net
+360 degrees, which is orientation-equivalent to zero. With the retained
++/-90-degree placement rotations, all four leg defaults can now use +0.50 N*m
+and bend downward in world space. All leg theta defaults remain zero. No
+stiffness, damping, speed, geometry, attachment, or torque-mapping value was
+changed in this mounting/sign update.
+
+2026-10-22 - Closed-loop 90-degree quadruped bend compensation
+---------------------------------------------------------------
+The quadruped simulator now measures each leg's signed total roll bend by
+accumulating relative rotation vectors across its 12 disc orientations. A
+0.08-second low-pass filter feeds a bounded PI outer loop with Kp=0.8,
+Ki=1.5/s, +/-90-degree correction, and +/-250-degree compensated-total-target
+limits. The corrected total is distributed over the original 11 intervals.
+This preserves the external command mapping of 0.50 N*m to 90 degrees while
+allowing the internal equilibrium target to compensate gravity/contact load.
+
+Bounded test procedure:
+- controller: all four phi torques +0.50 N*m; all theta commands 0 degrees
+- simulator: SOFT_QUADRUPED_HEADLESS=1
+- duration: SOFT_QUADRUPED_MAX_STEPS=2400 (10 simulated seconds at 240 Hz)
+- front-left final bend: 90.847141 degrees
+- front-right final bend: 90.641766 degrees
+- rear-left final bend: 91.800670 degrees
+- rear-right final bend: 91.611396 degrees
+- maximum absolute final error: 1.800670 degrees
+- missing prim, Python exception, or segmentation fault: none
+
+The result validates simulated tracking for this command and contact state;
+it does not establish physical torque calibration or global stability.
+
+A longer 4800-step (20 simulated second) convergence run produced:
+- front-left final bend: 89.414221 degrees
+- front-right final bend: 89.522961 degrees
+- rear-left final bend: 91.104852 degrees
+- rear-right final bend: 90.366693 degrees
+- maximum absolute final error: 1.104852 degrees
+- missing prim, Python exception, or segmentation fault: none
+
+The longer run is the current reported endpoint result. The earlier 2400-step
+values above are retained as transient-history evidence.
+
+2026-10-22 - Responsive real-time quadruped tuning
+---------------------------------------------------
+The GUI appeared to play in slow motion because the five-member, 12-disc model
+was evaluating 240 physics steps per simulated second with 32 position and 8
+velocity solver iterations on every disc and virtual link. The responsive
+working configuration uses 120 Hz physics, 60 Hz rendering, and 24/6 solver
+iterations. Torque slew increased from 1.5 to 4.0 N*m/s, the bend measurement
+filter decreased from 0.08 to 0.04 seconds, and PI gains increased from
+Kp=0.8, Ki=1.5/s to Kp=1.2, Ki=4.0/s. Joint stiffness/damping and rigid-body
+damping were retained.
+
+Initial 120-Hz tests before the final solver-iteration reduction produced:
+- 600 steps / 5 simulated seconds: 90.882986, 91.360747, 96.223663,
+  95.276557 degrees (front-left, front-right, rear-left, rear-right)
+- 1200 steps / 10 simulated seconds: 89.890820, 89.168053, 88.690076,
+  88.942401 degrees
+- maximum 10-second absolute error: 1.309924 degrees
+
+These measurements verify the faster controller at 120 Hz. A separate test
+below verifies the final 24/6 solver configuration. Results are simulated and
+do not establish hardware timing or torque calibration.
+
+The first solver-reduction trial at 16/4 was rejected. At 10 simulated seconds
+the front legs measured 90.252586 and 90.596357 degrees, but the rear legs
+measured only 57.889167 and 59.840416 degrees. It is retained here as negative
+evidence and is not the active configuration.
+
+Final 24/6 solver validation:
+- command: +0.50 N*m and zero theta on all four legs
+- duration: 1200 steps / 10 simulated seconds at 120 Hz
+- front-left final bend: 91.655269 degrees
+- front-right final bend: 91.090459 degrees
+- rear-left final bend: 90.707612 degrees
+- rear-right final bend: 89.950978 degrees
+- maximum absolute final error: 1.655269 degrees
+- missing prim, Python exception, or segmentation fault: none
+
+The 24/6 result is the accepted responsive configuration. It preserves
+all-leg tracking while reducing physics work relative to the original
+240-Hz, 32/8 configuration.
+
+The GUI path was also corrected to render once every two 120-Hz physics steps.
+This enforces the intended 60-Hz display target and removes the redundant
+second render call per display interval. Headless physics and the validated
+all-leg bend results are unaffected by this GUI-only scheduling change.
+
+2026-10-22 - Pressure-like stiff and quick quadruped tuning
+-----------------------------------------------------------
+To emulate the qualitative response of pneumatic membranes acting inside an
+elastomeric limb, roll stiffness increased from 2,500,000 to 5,000,000 and yaw
+stiffness from 3,750,000 to 7,500,000. Joint damping was scaled by approximately
+sqrt(2): roll 15,000 to 21,000 and yaw 18,000 to 25,500. This raises the
+simplified natural frequency while retaining a similar damping ratio. Torque
+slew increased from 4.0 to 6.0 N*m/s, theta slew from 60 to 90 degrees/s, and
+the bend filter decreased from 0.04 to 0.025 seconds. Rigid-body linear/angular
+damping increased from 2.0/10.0 to 3.0/15.0.
+
+Five-second result at +0.50 N*m and zero theta on all legs:
+- front-left: 90.755450 degrees
+- front-right: 90.700627 degrees
+- rear-left: 92.678290 degrees
+- rear-right: 92.051704 degrees
+
+Ten-second hold result:
+- front-left: 89.317828 degrees
+- front-right: 89.380911 degrees
+- rear-left: 89.139492 degrees
+- rear-right: 89.547135 degrees
+- maximum absolute final error: 0.860508 degrees
+- missing prim, Python exception, or segmentation fault: none
+
+These tests support quick approach and steady simulated holding for the tested
+command/contact state. The tuning is not a calibrated pneumatic, hyperelastic,
+or fluid-dynamic material model and requires separate disturbance testing.
+
+2026-10-22 - Immense-stiffness quadruped tuning
+------------------------------------------------
+At the researcher's request, the pressure-like joint stiffness was increased
+by another factor of four while damping was doubled to retain approximately
+the same simplified damping ratio. Active roll stiffness/damping are now
+20,000,000/42,000 and yaw stiffness/damping are 30,000,000/51,000. Torque slew
+is 10.0 N*m/s, theta slew is 120 degrees/s, the measurement filter is 0.015 s,
+and rigid-body linear/angular damping are 5.0/25.0.
+
+Five-second result at +0.50 N*m and zero theta on all legs:
+- front-left: 89.359295 degrees
+- front-right: 89.229700 degrees
+- rear-left: 90.071133 degrees
+- rear-right: 90.032421 degrees
+- maximum absolute error: 0.770300 degrees
+
+Ten-second hold result:
+- front-left: 89.953817 degrees
+- front-right: 89.866258 degrees
+- rear-left: 89.343496 degrees
+- rear-right: 89.455775 degrees
+- maximum absolute final error: 0.656504 degrees
+- missing prim, Python exception, or segmentation fault: none
+
+The immense-stiffness configuration is the accepted active tuning. It remained
+numerically stable for these bounded tests. The large drive gains are still a
+control approximation, not identified pneumatic pressure or rubber stiffness.

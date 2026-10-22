@@ -588,6 +588,39 @@ def build_deck(document, context):
               "Live voltage graph captured from /soft_snake/module_N/sensors/... topics.",
               26.2, 14.8, 5.8, 1.2, 10.5, MID)
 
+    page = deck.new_slide("Twelve-Disc Quadruped: Hybrid Control", "integration")
+    deck.metric(page, "5", "12-disc robot members", 1.2, 2.7, 9.8, MAROON)
+    deck.metric(page, "11", "physical intervals per member",
+                11.7, 2.7, 9.8, TEAL)
+    deck.metric(page, "1 N·m → 180°", "command-admittance scale",
+                22.2, 2.7, 9.8, GOLD)
+    deck.text(page, "Stable original assembly with a new control interface", 1.4, 6.05,
+              19.5, 0.7, 18, MAROON, True)
+    deck.bullet_list(page, [
+        "Working simulator regenerated directly from the old grounded quadruped.",
+        "USD, height, positions, ±90° placement, attachments, and camera are retained.",
+        "Left legs: net 180° axial rotation; right legs: net 360° after an additional 180°.",
+        "Joint limits, friction, solver settings, and body lock are unchanged.",
+        "Phi is a bounded torque-admittance command; theta remains held position.",
+        "The base gets 1/11 of total bend; each later A/B joint gets 1/22.",
+        "Torque is limited to ±1.0 N·m and slewed at 10.0 N·m/s.",
+        "Immense-stiffness gains: roll 20M/42k; yaw 30M/51k.",
+        "Rigid-body damping is 5.0 linear / 25.0 angular; neutral theta is 0°.",
+        "The downward-bending standing posture uses positive torque on all four legs.",
+        "Disc-orientation PI feedback compensates load: Kp 1.2, Ki 4.0/s.",
+        "Responsive playback: 120 Hz physics, render every 2 steps (60 Hz), 24/6 solver.",
+        "+0.50 N·m: 5 s near target; 10 s final bends 89.34° to 89.95°.",
+    ], 1.4, 7.1, 21.0, 1.15, 12.8)
+    deck.rectangle(page, 23.3, 6.1, 8.6, 8.2, WHITE, 0xD7D2CC, True)
+    deck.text(page, "Validation boundary", 23.9, 6.7, 7.4, 0.6,
+              17, MAROON, True)
+    deck.text(page,
+              "The 1 N·m → 180° law is a simulated command mapping, not raw or "
+              "calibrated physical torque. Leg-angle tracking is simulation-only; "
+              "hardware validation, broad contact stability, and locomotion remain "
+              "future tests.",
+              23.9, 7.8, 7.2, 4.8, 13.0, DARK)
+
     page = deck.new_slide("Next Research Steps", "forward plan")
     steps = [
         ("01", "Physical gauge selection", "Choose a commercial gauge, substrate, adhesive, and temperature compensation strategy."),
@@ -612,7 +645,7 @@ def build_deck(document, context):
         ("CONTROL", "Position + torque admittance + minimum-energy circle"),
         ("SHAPE", "Synchronized five-interval constant-curvature target"),
         ("SENSING", "Six pose-derived strain channels + bridge voltages"),
-        ("VISUALIZATION", "Isaac Sim + sensor-driven RViz reconstruction"),
+        ("INTEGRATION", "Verified limb reused in a five-member quadruped"),
         ("EVIDENCE", "Automated tests and research documentation"),
     ]
     for index, (heading, detail) in enumerate(outcomes):

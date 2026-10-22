@@ -76,8 +76,8 @@ TF and sensor-driven limb visualization in RViz
 The word ``physical'' above means the physics-simulated leader, not laboratory
 hardware. The RViz model is a kinematic visualization, not a dynamically
 actuated second robot. The earlier two-limb Isaac configuration is retained
-as a backup. Earlier quadruped work is recorded as development history;
-the quadruped is separate from the currently verified six-disc workflow.
+as a backup. The active quadruped returns to the original 12-disc, five-limb
+assembly and adds the repository's hybrid phi-torque/theta-position interface.
 
 \section{Evidence and documentation provenance}
 This report is based on the development conversation, the repository README,
@@ -125,8 +125,8 @@ Saved limb and quadruped & Requested new USD versions and reuse in a soft
 quadruped. A ROS publisher failure exposed use of a dictionary for
 \texttt{\_publishers}, which conflicts with rclpy's internal publisher list.
 Ground hanging constraints, body curvature, and jelly-like motion were also
-addressed during earlier development. The quadruped remains a separate,
-historical implementation, not a validated deployment of the current limb.\\
+addressed during earlier development. A six-disc integration was briefly made,
+then explicitly overwritten by the stable 12-disc assembly with hybrid control.\\
 Hanging limb and launch & Moved the fixed base into the air and hung the limb
 downward. Corrected the workflow around missing installed loader paths by
 rebuilding and locating scripts through the installed package.\\
@@ -856,6 +856,124 @@ synchronized within each module, 18 gauge publishers were detected, and the
 test returned \texttt{PASS}. These results validate the software realization,
 not physical torque or strain calibration.
 
+\subsection{Hybrid control of the 12-disc quadruped}
+The active working quadruped returns to the original five-limb assembly based
+on \path{soft_limb_position_control.usd}. Each member contains 12 discs and 11
+physical intervals. The active working simulator is an exact geometry-and-
+physics copy of the preserved old grounded quadruped except for one explicitly
+authorized mounting correction. The original limb translations,
+$\pm90\degrees{}$ placement rotations, 1.0~m initial height, endpoint
+attachments, locked body bending, split-D6 topology, force-drive stiffness and
+damping, contact parameters, solver settings, and camera are retained.
+The left legs receive a net 180\degrees{} rotation about their local
+longitudinal axes. Starting from the preceding all-leg-180 configuration,
+FrontRight and RearRight receive a second 180\degrees{} axial turn and thus
+have a net 360\degrees{} rotation, which is orientation-equivalent to zero.
+Combined with the opposite $\mp90\degrees{}$ placement rotations, this makes
+the same positive torque sign bend all four legs downward in world space.
+Neutral theta is zero for every leg. No
+vertical-leg reinterpretation, height change, collision change, or new USD
+geometry is active. The intermediate six-disc quadruped integration was
+explicitly overwritten rather than retained.
+
+For limb $i$, the command pair is $(\tau_{c,i},\theta_i)$. The first quantity
+is the same bounded torque-admittance input used elsewhere in this repository,
+not raw applied joint torque; the second is the held theta position. With
+$N=11$, $\tau_{\max}=1$~N\,m, and $\phi_{\max}=180\degrees{}$, the implemented
+target distribution is
+\begin{align}
+ q_{i,0} &= \frac{\tau_{c,i}}{\tau_{\max}}
+             \frac{\phi_{\max}}{N},\\
+ q_{i,k,A}=q_{i,k,B} &= \frac{\tau_{c,i}}{\tau_{\max}}
+             \frac{\phi_{\max}}{2N},\qquad k=1,\ldots,10.
+ \label{eq:quadruped_hybrid_distribution}
+\end{align}
+Thus the base joint contributes one full interval and each later A/B pair
+contributes two half intervals, giving a nominal total bend of
+$\phi_i=180\tau_{c,i}$ degrees for torque expressed in N\,m. Uniform interval
+distribution follows the piecewise constant-curvature assumption reviewed by
+Webster and Jones~\cite{webster2010}; the numerical torque-to-angle law is a
+repository-specific command mapping and is not attributed to that publication
+or claimed as a calibrated physical constitutive law.
+
+Torque commands are clipped to $\pm1$~N\,m and slew-limited to
+10.0~N\,m\,s$^{-1}$. Roll stiffness/damping are
+$2.0\times10^7/4.2\times10^4$, and yaw stiffness/damping are
+$3.0\times10^7/5.1\times10^4$. Relative to the preceding pressure-like
+configuration, stiffness is multiplied by four while damping is doubled.
+Under the simplified second-order interpretation, this doubles natural
+frequency while approximately preserving damping ratio, producing an
+intentionally immense-rigidity response without relying on excessive damping
+that would slow actuation. To dissipate free-body and contact-induced motion,
+every quadruped disc and virtual-link rigid body receives linear damping 5.0
+and angular damping 25.0.
+Theta targets retain the original $\pm25\degrees{}$ joint limit and use a
+120~degree-per-second target slew. Every controller parameter uses
+the form \path{<limb>.phi_torque} or \path{<limb>.theta}. The body torque and
+all theta defaults are zero; each leg defaults to +0.50~N\,m for the common-sign
+downward-bending posture.
+
+The quadruped now uses measured-bend feedback rather than assuming that the
+open-loop equilibrium target is achieved under load. Let
+$\hat{\phi}_i$ be the signed accumulated roll bend obtained from consecutive
+disc orientations, and let
+$\phi_{d,i}=180\tau_{c,i}$ degrees. With a first-order measurement filter of
+time constant 0.015~s, the implemented outer-loop correction is
+\begin{align}
+ e_i &= \phi_{d,i}-\hat{\phi}_i,\\
+ c_i &= \operatorname{sat}_{90\degrees{}}
+       \left(1.2e_i+\int 4.0e_i\,dt\right),\\
+ \phi_{t,i} &= \operatorname{sat}_{250\degrees{}}
+       \left(\phi_{d,i}+c_i\right).
+ \label{eq:quadruped_bend_feedback}
+\end{align}
+The corrected total target $\phi_{t,i}$ is distributed using
+Equation~\eqref{eq:quadruped_hybrid_distribution}. The 250\degrees{} internal
+cap limits the base-joint target to approximately 22.73\degrees{}, below the
+25\degrees{} physical joint bound. This compensator changes the internal
+equilibrium request; it does not convert the repository command into a
+calibrated physical torque measurement.
+
+For the responsive GUI configuration, the physics frequency is 120~Hz, the
+render frequency is 60~Hz, and the per-body solver settings are 24 position
+and 6 velocity iterations. This replaces the former 240~Hz, 32/8 configuration,
+which imposed substantially more physics work per simulated second and could
+cause the articulated five-limb model to be displayed below real time on the
+test computer. The torque slew and feedback gains were increased at the same
+time to reduce command rise and load-compensation settling times; the high
+joint and rigid-body damping values were retained to limit oscillation.
+The GUI loop renders once per two physics steps, giving the intended 60~Hz
+display target instead of issuing one render call at all 120 physics steps.
+
+A final 1200-step (10 simulated second) headless Isaac Sim test using the
+immense-stiffness drive tuning commanded +0.50~N\,m and zero theta on all four
+legs, corresponding to a desired bend of 90\degrees{}. Final measured bends
+were 89.9538\degrees{} (front-left), 89.8663\degrees{} (front-right),
+89.3435\degrees{} (rear-left), and 89.4558\degrees{} (rear-right). The maximum
+absolute final error was 0.6565\degrees{}. At 600 steps (5 simulated seconds),
+the corresponding values were 89.3593\degrees{}, 89.2297\degrees{},
+90.0711\degrees{}, and 90.0324\degrees{}, showing rapid approach and strong
+holding. A more aggressive 16/4 solver trial
+was rejected because its rear legs reached only approximately
+58--60\degrees{}. This demonstrates simulated
+load-compensated tracking for this test condition; it is not hardware
+validation or proof of stability for every command and contact state.
+The phrase ``pressure-like'' describes the intended simulated response only;
+the drive gains do not model chamber pressure, hyperelastic rubber, pneumatic
+flow, hysteresis, or measured membrane properties.
+
+A 240-step headless startup test and a 1600-step headless live-command test
+completed. The latter applied 0.1~N\,m and 5\degrees{} to the front-left limb.
+No missing prim, invalid joint, fixed-attachment, ROS publisher, segmentation
+fault, or PhysX startup failure occurred. These checks establish software
+integration and command delivery only; measured bend tracking, contact
+stability, gait behavior, and physical torque calibration remain open tests.
+The source diff against the preserved old simulator contains only the hybrid
+control constants, subscriber/controller implementation, and corresponding
+status text. This guards against unintended geometry or physics changes. The
+previous vertical-stance and 0.021~m flat-layout trials are rejected development
+iterations and are not part of the active configuration.
+
 \section{Known limitations and rejected approaches}
 \begin{enumerate}
 \item Equation~\eqref{eq:drive} produces a substantial full-orientation error
@@ -880,8 +998,9 @@ for unloaded, single-axis simulation. The active rescaled interface spans 0.1
 to 1.0~N\,m through a maximum of 180\degrees{}. It is not raw torque
 control, a material constitutive model, or a hardware calibration; negative
 commands, payloads, disturbances, and arbitrary bending directions require
-separate validation. The quadruped and two-physical-limb backup were not part
-of these tests.
+separate validation. The two-physical-limb backup was not part of these tests.
+The quadruped has passed bounded startup and live-command integration checks,
+but not a measured bend-tracking, contact-stability, or locomotion regression.
 \item The circular-path optimizer minimizes squared torque commands under the
 implemented kinematic map. It does not include rate-dependent damping loss,
 motor efficiency, electrical power, hysteresis, or material viscoelasticity.
@@ -921,6 +1040,18 @@ ros2 topic echo /soft_limb/measured_tip/phi --once
 The echo is run in another terminal while the controller is active. Default
 working position parameters are phi=90\degrees{} and theta=0\degrees{};
 explicit experimental parameters are preferable.
+
+The repository-root note \path{Run Commands} was synchronized on
+October~22, 2026 with the active executable interfaces. It separates terminal
+blocks for the single module, the three-module manual controller, automatic
+18-channel voltage plotting, the minimum-energy circular path, and the
+12-disc hybrid quadruped. The quadruped instructions explicitly use zero
+neutral theta, a net 180\degrees{} left-leg axial rotation, and a net
+360\degrees{} right-leg rotation after the additional 180\degrees{} turn. The
+note records positive torque on all four legs for the downward-bending standing
+posture. It further
+distinguishes the circular-path launch from the manual three-module controller
+to prevent two nodes from publishing competing commands.
 
 To verify independently from the graphical launch, stop other controllers,
 source the environment, and run

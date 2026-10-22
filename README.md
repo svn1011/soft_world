@@ -745,20 +745,76 @@ such as `pxr` and `isaacsim`.
 
 ## Soft quadruped
 
-The older quadruped implementation is separate from the active RViz workflow:
+The active working quadruped retains the old 12-disc grounded robot's USD,
+positions, `INITIAL_HEIGHT = 1.0`, attachments, locked body, split D6 joints,
+drive stiffness/damping, friction, solver settings, and camera. The one
+authorized mounting configuration keeps the left legs at 180 degrees about
+their local length axes and applies an additional 180-degree turn to the right
+legs, giving the right legs a net 360-degree rotation. The simulator maps phi
+torque to a slewed equilibrium bend target while theta remains position
+controlled. Linear damping 5.0 and angular damping 25.0 are applied to the
+quadruped rigid bodies. For an immensely stiff, high-pressure-like response,
+the torque-command slew is 10.0 N m/s, theta target speed is 120 degrees/s,
+roll stiffness/damping are 20,000,000/42,000, and yaw stiffness/damping are
+30,000,000/51,000. Relative to the preceding pressure-like configuration,
+stiffness was multiplied by four while damping was doubled. In the simplified
+second-order interpretation, this doubles natural frequency while retaining a
+similar nominal damping ratio. The superseded six-disc quadruped was
+overwritten as requested.
+The active quadruped uses 120 Hz physics and 60 Hz rendering. The former
+240 Hz physics rate made the five-limb, 12-disc model expensive to display and
+could make GUI motion appear slower than real time. The 120 Hz setting and
+24/6 position/velocity solver iterations reduce that workload while preserving
+the damped joint and contact model. The GUI renders once per two physics steps,
+enforcing the intended 60 Hz display target instead of issuing 120 render calls
+per simulated second.
+
+Build and launch the working quadruped:
+
+```bash
+cd "$SOFT_WORLD_WS"
+source /opt/ros/humble/setup.bash
+colcon build --packages-select soft_world
+source install/setup.bash
+ros2 launch soft_world soft_quadraped_working.launch.py
+```
+
+In another sourced terminal, start its hybrid controller. This example applies
+0.1 N·m to the front-left phi input and holds its theta at 5 degrees:
 
 ```bash
 cd "$SOFT_WORLD_WS"
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-ros2 launch soft_world soft_quadraped.launch.py
+python3 scripts/control_quadraped_working.py --ros-args \
+  -p front_left.phi_torque:=0.1 \
+  -p front_left.theta:=5.0
 ```
 
-In another terminal:
+Parameters follow `<limb>.phi_torque` and `<limb>.theta`, where `<limb>` is
+`front_left`, `front_right`, `rear_left`, `rear_right`, or `body`. The left
+legs have a net 180-degree axial rotation and the right legs a net 360-degree
+rotation after their additional turn. Neutral theta remains zero. Use positive
+torque on all four legs for the downward-bending standing posture. Phi torque is
+clipped to ±1.0 N·m and mapped by the simulation admittance law so that 1.0 N·m
+requests 180 degrees total bend, distributed over the 11 intervals. This is a
+command scaling, not calibrated raw physical torque. Theta remains a held
+position command. Default leg torque is +0.50 N·m, default theta and body
+torque are zero, and body bending remains locked.
 
-```bash
-python3 scripts/control_quadraped.py
-```
+Each leg now closes an outer bend loop around the equilibrium targets. The
+measured bend is accumulated from the relative orientations of its 12 discs,
+low-pass filtered, and compared with `180 degrees * torque / 1.0 N·m`. A
+bounded PI correction (`Kp = 1.2`, `Ki = 4.0 /s`, maximum correction 90
+degrees) raises the internal equilibrium target to compensate gravity and
+contact loading. The maximum compensated total target is 250 degrees, keeping
+the base-joint share below its 25-degree limit. With the immense-stiffness
+tuning, a 600-step, 5-second test measured 89.36, 89.23, 90.07, and 90.03
+degrees. At 1200 steps/10 seconds, the four legs measured 89.95, 89.87, 89.34,
+and 89.46 degrees for front-left, front-right, rear-left, and rear-right. The
+maximum final absolute error was 0.66 degrees. These gains emulate a highly
+pressurized stiff actuator response; they are not a calibrated pneumatic
+material model.
 
 ## Project layout
 
@@ -805,14 +861,19 @@ python3 scripts/control_quadraped.py
   three-module regression.
 - `scripts/soft_3_working.py` — `soft_3_working.usd`
   generator.
+- `launch/soft_quadraped_working.launch.py` — launches the 12-disc hybrid
+  quadruped in Isaac Sim.
+- `scripts/soft_quadraped_grounded_working.py` — original five-limb 12-disc
+  assembly plus phi-torque/theta-position subscribers.
+- `scripts/control_quadraped_working.py` — publishes independent hybrid
+  commands for the body and four legs.
 
 ### Backup files
 
 - `scripts/load_soft_limb_in_simulation_working.py` — two-limb Isaac version.
 - `launch/soft_world_in_simulation_working.launch.py` — backup launch.
 
-Files without `_working` are preserved older versions. Quadruped files are
-currently independent of the active working limb.
+Files without `_working` are preserved older versions.
 
 ## Safe shutdown
 
